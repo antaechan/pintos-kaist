@@ -28,6 +28,10 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+/* List of processes in THREAD_BLOCKED state, that is, processes
+   that are blocked and wait to unblock */
+static struct list sleep_list;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -108,6 +112,7 @@ thread_init (void) {
 	/* Init the globla thread context */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
+	list_init (&sleep_list);
 	list_init (&destruction_req);
 
 	/* Set up a thread structure for the running thread. */
@@ -408,6 +413,8 @@ init_thread (struct thread *t, const char *name, int priority) {
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
+
+	t->wakeup_ticks = 0;		/* implement Alarm Clock */
 	t->magic = THREAD_MAGIC;
 }
 
@@ -587,4 +594,69 @@ allocate_tid (void) {
 	lock_release (&tid_lock);
 
 	return tid;
+}
+
+/* sleep current thread until wakeup_ticks */
+void
+thread_sleep_until(int64_t wakeup_ticks)
+{
+	struct thread *cur;
+	ASSERT(intr_get_level() == INTR_OFF);
+
+	cur = thread_current();
+	ASSERT(cur != idle_thread);
+	cur->wakeup_ticks = wakeup_ticks;
+
+	list_insert_ordered(&sleep_list, &cur->elem, thread_wakeup_ticks_less, NULL);
+	thread_block();
+
+}
+
+/* awake threads in sleep_list, which ticks reached to their wakeup_ticks */
+void
+thread_wakeup(int64_t ticks)
+{	
+	struct list_elem *e;
+	struct thread *sleep_thread;
+	
+	ASSERT(intr_get_level() == INTR_OFF);
+	
+	e = list_begin(&sleep_list);
+	while(e != list_end(&sleep_list))
+	{
+		sleep_thread = list_entry(e, struct thread, elem);
+		if(sleep_thread->wakeup_ticks <= ticks){
+			sleep_thread->wakeup_ticks = 0;
+			e = list_remove(e);
+			thread_unblock(sleep_thread);
+		}
+		else{
+			break;
+		}
+	}
+	
+}
+
+bool
+thread_wakeup_judge(int64_t ticks)
+{
+	struct thread *t;
+	if(!list_empty(&sleep_list)){
+		t = list_entry(list_front(&sleep_list), struct thread, elem);
+		return (t->wakeup_ticks <= ticks) ? true : false;
+	}
+	else{
+		return false;
+	}
+}
+
+/* Compare wakeup_ticks of two threads */
+bool
+thread_wakeup_ticks_less(const struct list_elem* a,
+						 const struct list_elem* b,
+						 void * aux UNUSED)
+{
+	struct thread *thread_a = list_entry(a, struct thread, elem);
+	struct thread *thread_b = list_entry(b, struct thread, elem);
+	return thread_a->wakeup_ticks < thread_b->wakeup_ticks;	
 }
