@@ -212,6 +212,8 @@ thread_create (const char *name, int priority,
 	/* Add to run queue. */
 	thread_unblock (t);
 
+	max_priority_compare();
+
 	return tid;
 }
 
@@ -245,7 +247,7 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+	list_insert_ordered(&ready_list, &t->elem, thread_priority_less, NULL);
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -300,7 +302,7 @@ thread_exit (void) {
 /* Yields the CPU.  The current thread is not put to sleep and
    may be scheduled again immediately at the scheduler's whim. */
 void
-thread_yield (void) {
+thread_yield(void) {
 	struct thread *curr = thread_current ();
 	enum intr_level old_level;
 
@@ -308,7 +310,7 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_push_back (&ready_list, &curr->elem);
+		list_insert_ordered(&ready_list, &curr->elem, thread_priority_less, 0);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -317,6 +319,7 @@ thread_yield (void) {
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
+	max_priority_compare();
 }
 
 /* Returns the current thread's priority. */
@@ -659,4 +662,23 @@ thread_wakeup_ticks_less(const struct list_elem* a,
 	struct thread *thread_a = list_entry(a, struct thread, elem);
 	struct thread *thread_b = list_entry(b, struct thread, elem);
 	return thread_a->wakeup_ticks < thread_b->wakeup_ticks;	
+}
+
+/* Compare priority of two threads */
+bool thread_priority_less(const struct list_elem *a,
+						  const struct list_elem *b,
+						  void *aux UNUSED)
+{
+	return (list_entry(a, struct thread, elem)->priority) > (list_entry(b, struct thread, elem)->priority);
+}
+
+void max_priority_compare(void){
+	if(list_empty(&ready_list)) return;
+
+	int cur_priority = thread_current()->priority;
+	int ready_list_priority = list_entry(list_begin(&ready_list), struct thread, elem)->priority;
+
+	if(cur_priority < ready_list_priority){
+		thread_yield();
+	}
 }

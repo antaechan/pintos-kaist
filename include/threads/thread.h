@@ -153,4 +153,9 @@ bool thread_wakeup_ticks_less(const struct list_elem* a,
 							  const struct list_elem* b,
 							  void * aux UNUSED);
 
+bool thread_priority_less (const struct list_elem *a,
+							  const struct list_elem *b,
+							  void *aux UNUSED);
+void max_priority_compare(void);
+
 #endif /* threads/thread.h */
