@@ -324,6 +324,7 @@ void
 thread_set_priority (int new_priority) {
 	thread_current()->original_priority = new_priority;
 	priority_update(thread_current());
+	list_sort(&ready_list, thread_priority_more, NULL);
 	max_priority_compare();
 }
 
