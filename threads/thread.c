@@ -324,7 +324,6 @@ void
 thread_set_priority (int new_priority) {
 	thread_current()->original_priority = new_priority;
 	priority_update(thread_current());
-	list_sort(&ready_list, thread_priority_more, NULL);
 	max_priority_compare();
 }
 
@@ -689,6 +688,8 @@ bool thread_priority_more(const struct list_elem *a,
 /* Compare current priority vs max priority in ready_list, and yield */
 void max_priority_compare(void){
 	if(list_empty(&ready_list)) return;
+
+	list_sort(&ready_list, thread_priority_more, NULL);
 
 	int cur_priority = thread_current()->priority;
 	int ready_list_priority = list_entry(list_begin(&ready_list), struct thread, elem)->priority;
