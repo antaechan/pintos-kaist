@@ -98,6 +98,12 @@ struct thread {
 	/* implement alarm_clock */
 	int64_t wakeup_ticks;				/* tick to wake up */
 
+	/* implement priority donation */
+	int original_priority;
+	struct list donor_list;
+	struct list_elem donor_elem;
+	struct lock *wait_for_what_lock;
+
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
@@ -157,5 +163,9 @@ bool thread_priority_more(const struct list_elem *a,
 						  const struct list_elem *b,
 						  void *aux UNUSED);
 void max_priority_compare(void);
+
+void priority_donate(struct thread *thread);
+void priority_update(struct thread *thread);
+void update_donor_lock(struct lock *lock);
 
 #endif /* threads/thread.h */

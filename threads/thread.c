@@ -24,6 +24,10 @@
    Do not modify this value. */
 #define THREAD_BASIC 0xd42df210
 
+#define MAX(x, y) (x > y) ? x : y
+#define MIN(x, y) (x < y) ? x : y
+#define DONATION_DEPTH  9
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
@@ -318,7 +322,8 @@ thread_yield(void) {
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
-	thread_current ()->priority = new_priority;
+	thread_current()->original_priority = new_priority;
+	priority_update(thread_current());
 	max_priority_compare();
 }
 
@@ -419,6 +424,12 @@ init_thread (struct thread *t, const char *name, int priority) {
 
 	t->wakeup_ticks = 0;		/* implement Alarm Clock */
 	t->magic = THREAD_MAGIC;
+
+	list_init(&t->donor_list);     /* implement Priority Donation */
+	t->original_priority = priority;
+	t->wait_for_what_lock = NULL;
+
+
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -684,4 +695,49 @@ void max_priority_compare(void){
 	if(cur_priority < ready_list_priority){
 		thread_yield();
 	}
+}
+
+/* Donate priority to thread, which is locking 'A' that current thread wants to get (while depth < 9) */
+// recursively? 
+void priority_donate(struct thread *thread){
+	int depth;
+
+	struct thread *cur = thread;
+	int cur_priority = cur->priority;
+	
+	for(depth = 0; depth < DONATION_DEPTH; depth++){     /* nested donation */
+		if(cur->wait_for_what_lock == NULL) break;
+		else{
+			cur = cur->wait_for_what_lock->holder;
+			cur->priority = cur_priority;
+		}
+	}
+}
+
+/* After setting thread's priority, update it and compare with max priority in donor_list */
+void priority_update(struct thread *thread){
+	struct thread *cur = thread;
+	cur->priority = cur->original_priority;
+
+	if(list_empty(&cur->donor_list)) return;
+  	list_sort(&cur->donor_list, thread_priority_more, NULL);
+  	int64_t high_priority = list_entry(list_begin(&cur->donor_list), struct thread, donor_elem)->priority;
+  	cur->priority = MAX(high_priority, cur->priority);
+}
+
+/* After releasing lock, update unnecessary donor in donor_list */
+void update_donor_lock(struct lock *lock){
+	struct thread *cur = thread_current();
+	struct list_elem *donor = list_begin(&cur->donor_list);
+
+	while (donor != list_end(&cur->donor_list)){
+		struct thread *donor_thread = list_entry(donor, struct thread, donor_elem);
+		if (lock == donor_thread->wait_for_what_lock){
+			donor = list_remove(donor);
+		}
+		else{
+			donor = list_next(donor);
+		}
+	}
+
 }
