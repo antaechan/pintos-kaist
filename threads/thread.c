@@ -674,6 +674,7 @@ bool thread_priority_more(const struct list_elem *a,
 	return a_priority > b_priority;
 }
 
+/* Compare current priority vs max priority in ready_list, and yield */
 void max_priority_compare(void){
 	if(list_empty(&ready_list)) return;
 
