@@ -133,6 +133,20 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 	old_level = intr_disable();
 	ticks++;
 	thread_tick ();
+
+	//	advanced scheduler implementation
+	if(thread_mlfqs){
+		thread_increment_recent_cpu();
+		if(ticks % TIMER_FREQ == 0){
+			thread_calculate_load_avg();
+			thread_recalculate_recent_cpu();
+		}
+
+		if(ticks % 4 == 0){
+			thread_recalculate_priority();
+		}
+	}
+
 	if(thread_wakeup_judge(ticks))
 		thread_wakeup(ticks);
 	

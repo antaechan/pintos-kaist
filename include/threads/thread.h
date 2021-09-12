@@ -5,6 +5,8 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/fixed-point.h"
+
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -98,6 +100,12 @@ struct thread {
 	/* implement alarm_clock */
 	int64_t wakeup_ticks;				/* tick to wake up */
 
+	/* implement advanced scheduler */
+	struct list_elem allelem;			/* use to traverse all threads */
+
+	int nice;
+	fixed_point	recent_cpu;
+
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
@@ -157,5 +165,10 @@ bool thread_priority_more(const struct list_elem *a,
 						  const struct list_elem *b,
 						  void *aux UNUSED);
 void max_priority_compare(void);
+
+void thread_increment_recent_cpu(void);
+void thread_calculate_load_avg(void);
+void thread_recalculate_recent_cpu(void);
+void thread_recalculate_priority(void);
 
 #endif /* threads/thread.h */
