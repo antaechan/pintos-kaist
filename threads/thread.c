@@ -146,7 +146,6 @@ thread_start (void) {
 	sema_init (&idle_started, 0);
 	load_avg = 0;	/* initialize load_avg to 0 */
 	thread_create ("idle", PRI_MIN, idle, &idle_started);
-
 	/* Start preemptive thread scheduling. */
 	intr_enable ();
 
@@ -227,9 +226,6 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
-
-	/* Add allelem to all_list. */
-	list_push_back(&all_list, &t->allelem);
 
 	/* reschedule */
 	max_priority_compare();
@@ -315,7 +311,8 @@ thread_exit (void) {
 	/* Just set our status to dying and schedule another process.
 	   We will be destroyed during the call to schedule_tail(). */
 	intr_disable ();
-	do_schedule (THREAD_DYING);
+	list_remove(&thread_current()->allelem);	/* Remove thread from all threads list   */
+	do_schedule (THREAD_DYING);	/* set our status to dying, and schedule another process.*/
 	NOT_REACHED ();
 }
 
@@ -338,6 +335,7 @@ thread_yield(void) {
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
+	if(thread_mlfqs)	return;
 	thread_current()->original_priority = new_priority;
 	priority_update(thread_current());
 	max_priority_compare();
@@ -393,7 +391,7 @@ thread_get_load_avg (void) {
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) {
-	/* TODO: Your implementation goes here */
+	
 	enum intr_level old_level;
 	int result;
 
@@ -469,6 +467,8 @@ init_thread (struct thread *t, const char *name, int priority) {
 	
 	t->nice = 0;				/* implement Advanced Scheduler */
 	t->recent_cpu = 0;
+
+	list_push_back(&all_list, &t->allelem);	/* Add allelem to all_list. */
 
 	t->magic = THREAD_MAGIC;
 
@@ -680,8 +680,6 @@ thread_wakeup(int64_t ticks)
 	struct list_elem *e;
 	struct thread *sleep_thread;
 	
-	ASSERT(intr_get_level() == INTR_OFF);
-	
 	e = list_begin(&sleep_list);
 	while(e != list_end(&sleep_list))
 	{
@@ -694,14 +692,14 @@ thread_wakeup(int64_t ticks)
 		else{
 			break;
 		}
-	}
-	
+	}	
 }
 
 bool
 thread_wakeup_judge(int64_t ticks)
 {
 	struct thread *t;
+
 	if(!list_empty(&sleep_list)){
 		t = list_entry(list_front(&sleep_list), struct thread, elem);
 		return (t->wakeup_ticks <= ticks) ? true : false;
@@ -750,7 +748,7 @@ void max_priority_compare(void){
 void thread_increment_recent_cpu()
 {
 	struct thread *cur = thread_current();
-	if(cur != idle_thread) return;
+	if(cur == idle_thread) return;
 	cur->recent_cpu = ADD_FP_INT(cur->recent_cpu, 1);
 }
 
@@ -765,7 +763,7 @@ void thread_calculate_load_avg()
 	temp1 = DIV_FP_INT(INT_TO_FP(59), 60);
 	temp1 = MUL_FP(temp1, load_avg);
 	temp2 = DIV_FP_INT(INT_TO_FP(1), 60);
-	temp2 = MUL_FP_INT(temp1, ready_threads);
+	temp2 = MUL_FP_INT(temp2, ready_threads);
 	load_avg = ADD_FP(temp1, temp2);
 }
 

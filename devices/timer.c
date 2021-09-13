@@ -129,28 +129,26 @@ timer_print_stats (void) {
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
-	enum intr_level old_level;
-	old_level = intr_disable();
+	
 	ticks++;
 	thread_tick ();
 
 	//	advanced scheduler implementation
 	if(thread_mlfqs){
 		thread_increment_recent_cpu();
+		if(ticks % 4 == 0){
+			thread_recalculate_priority();
+		}
+
 		if(ticks % TIMER_FREQ == 0){
 			thread_calculate_load_avg();
 			thread_recalculate_recent_cpu();
-		}
-
-		if(ticks % 4 == 0){
-			thread_recalculate_priority();
 		}
 	}
 
 	if(thread_wakeup_judge(ticks))
 		thread_wakeup(ticks);
 	
-	intr_set_level(old_level);
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

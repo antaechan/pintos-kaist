@@ -105,6 +105,7 @@ struct thread {
 
 	int nice;
 	fixed_point	recent_cpu;
+	
 	/* implement priority donation */
 	int original_priority;
 	struct list donor_list;
@@ -175,6 +176,7 @@ void thread_increment_recent_cpu(void);
 void thread_calculate_load_avg(void);
 void thread_recalculate_recent_cpu(void);
 void thread_recalculate_priority(void);
+
 void priority_donate(struct thread *thread);
 void priority_update(struct thread *thread);
 void update_donor_lock(struct lock *lock);
