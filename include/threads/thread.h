@@ -177,7 +177,9 @@ void thread_calculate_load_avg(void);
 void thread_recalculate_recent_cpu(void);
 void thread_recalculate_priority(void);
 
-void priority_donate(struct thread *thread);
+//void priority_donate(struct thread *thread);
+void priority_donate(struct thread *thread, int depth);
+
 void priority_update(struct thread *thread);
 void update_donor_lock(struct lock *lock);
 

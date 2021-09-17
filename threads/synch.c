@@ -203,12 +203,13 @@ lock_acquire (struct lock *lock) {
 
 	struct thread *cur = thread_current();
 	struct thread *lock_holder = lock->holder;
+	int depth = 0;
 
 	/* if lock holder is exist */
 	if (!thread_mlfqs && lock_holder){
 		cur->wait_for_what_lock = lock;
 		list_insert_ordered(&lock_holder->donor_list, &cur->donor_elem, thread_priority_more, 0);
-		priority_donate(cur);
+		priority_donate(cur, depth);
 	}
 
 	sema_down (&lock->semaphore);

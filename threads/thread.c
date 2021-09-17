@@ -818,19 +818,32 @@ void thread_recalculate_priority()
 
 /* Donate priority to thread, which is locking 'A' that current thread wants to get (while depth < 9) */
 // recursively? 
-void priority_donate(struct thread * thread)
-{
-	int depth;
-	struct thread *cur = thread;
+//void priority_donate(struct thread * thread)
+//{
+//	int depth;
+//	struct thread *cur = thread;
+//
+//	int cur_priority = cur->priority;
+//	
+//	for(depth = 0; depth < DONATION_DEPTH; depth++){     /* nested donation */
+//		if(cur->wait_for_what_lock == NULL) break;
+//		else{
+//			cur = cur->wait_for_what_lock->holder;
+//			cur->priority = cur_priority;
+//		}
+//	}
+//}
 
+void priority_donate(struct thread *thread, int depth){
+	struct thread *cur = thread;
 	int cur_priority = cur->priority;
-	
-	for(depth = 0; depth < DONATION_DEPTH; depth++){     /* nested donation */
-		if(cur->wait_for_what_lock == NULL) break;
-		else{
-			cur = cur->wait_for_what_lock->holder;
-			cur->priority = cur_priority;
-		}
+
+	if(depth==DONATION_DEPTH || cur->wait_for_what_lock==NULL) return;
+	else{
+		cur = cur->wait_for_what_lock->holder;
+		cur->priority = cur_priority;
+		depth++;
+		priority_donate(cur, depth);
 	}
 }
 
