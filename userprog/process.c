@@ -394,18 +394,6 @@ load (const char *cmdline, struct intr_frame *if_) {
 	bool success = false;
 	int i;
 
-	char * save_ptr;
-	char *argv[MAX_ARGC];
-	int argc = 0;
-	char * file_name;
-
-	argv[0] = strtok_r(cmdline, " ", &save_ptr);
-	while(argv[argc] != NULL){
-		argv[++argc] = strtok_r(NULL, " ", &save_ptr);
-	}
-
-	file_name = argv[0];	
-
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
 	if (t->pml4 == NULL)
@@ -493,44 +481,8 @@ load (const char *cmdline, struct intr_frame *if_) {
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-	char *addrs[MAX_ARGC];
-	int length;
-	void * rsp;
-
-	rsp = (void *)if_->rsp;
-
-	for(i = argc - 1; i >= 0 ; i--){
-		length = strlen(argv[i])+1;
-		rsp = rsp - length;
-		memcpy(rsp, argv[i], length);
-		addrs[i] = rsp;
-	}
-
-	// word_align
-	while((uintptr_t)rsp % WSIZE != 0){
-		rsp = rsp - 1;
-		*(uint8_t *)rsp = 0;
-	}
 	
-	// argv[argc] == NULL
-	rsp = rsp - WSIZE;
-	*(uint64_t *)rsp = 0;
-
-	for(i = argc - 1; i >= 0 ; i--){
-		rsp = rsp - WSIZE;
-		*(char **)rsp = addrs[i];
-	}
-
-	if_->R.rsi = (uintptr_t)rsp;
-	if_->R.rdi = argc;
-
-	// return address
-	rsp = rsp - WSIZE;
-	*(uint64_t *)rsp = 0;
-	if_->rsp = (uintptr_t)rsp;
-
 	success = true;
-	// hex_dump(if_->rsp, (void *)if_->rsp, 100, true);
 
 done:
 	/* We arrive here whether the load is successful or not. */
