@@ -22,16 +22,16 @@
 #include "vm/vm.h"
 #endif
 
-#define MAX_ARGC	128		/* implement argument passing */
-#define MAX_ARGU	128
-#define WSIZE		8
+#define MAX_ARGC		128		/* implement argument passing */
+#define MAX_ARGU_LEN	128
+#define WSIZE			8
 
 static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
 
-static void 
+static void
 construct_stack(struct intr_frame *if_, int argc, char ** argv);
 
 /* General process initializer for initd and other process. */
@@ -171,35 +171,38 @@ construct_stack(struct intr_frame *if_, int argc, char ** argv)
 	char *addrs[MAX_ARGC];
 	int length;
 	int i;
-	
+	void * rsp;
+	rsp = (void *)if_->rsp;
+
 	for(i = argc - 1; i >= 0 ; i--){
 		length = strlen(argv[i])+1;
-		if_->rsp = if_->rsp - length;
-		memcpy(if_->rsp, argv[i], length);
-		addrs[i] = if_->rsp;
+		rsp = rsp - length;
+		memcpy(rsp, argv[i], length);
+		addrs[i] = rsp;
 	}
 
 	// word_align
-	while(if_->rsp % WSIZE != 0){
-		if_->rsp--;
-		*(uint8_t *)(if_->rsp) = 0;
+	while((uintptr_t)rsp % WSIZE != 0){
+		rsp--;
+		*(uint8_t *)(rsp) = 0;
 	}
 	
 	// argv[argc] == NULL
-	if_->rsp = if_->rsp - WSIZE;
-	*(uint64_t *)if_->rsp = 0;
+	rsp = rsp - WSIZE;
+	*(uint64_t *)rsp = 0;
 
 	for(i = argc - 1; i >= 0 ; i--){
-		if_->rsp = if_->rsp - WSIZE;
-		memcpy(if_->rsp, &addrs[i], sizeof(char **));
+		rsp = rsp - WSIZE;
+		*(char **)rsp = addrs[i];
 	}
 
-	if_->R.rsi = if_->rsp;
+	if_->R.rsi = (uintptr_t)rsp;
 	if_->R.rdi = argc;
 
 	// return address
-	if_->rsp = if_->rsp - WSIZE;
-	*(uint64_t *)if_->rsp = 0;
+	rsp = rsp - WSIZE;
+	*(uint64_t *)rsp = 0;
+	if_->rsp = (uintptr_t)rsp;
 		
 }
 
@@ -207,16 +210,15 @@ construct_stack(struct intr_frame *if_, int argc, char ** argv)
  * Returns -1 on fail. */
 int
 process_exec (void *f_name) {
-	char cmdline[MAX_ARGU];
+	char cmdline[MAX_ARGU_LEN];
 	bool success;
-
-	/* parse command line */
-	strlcpy(cmdline, f_name, PGSIZE);
-
 	char * save_ptr;
 	char *argv[MAX_ARGC];
 	int argc = 0;
 	char * file_name;
+
+	/* parse command line */
+	strlcpy(cmdline, f_name, PGSIZE);
 
 	argv[0] = strtok_r(cmdline, " ", &save_ptr);
 	while(argv[argc] != NULL){
