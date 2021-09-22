@@ -22,10 +22,16 @@
 #include "vm/vm.h"
 #endif
 
+#define MAX_ARGC	128		/* implement argument passing */
+#define WSIZE		8
+
 static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
+
+static void 
+construct_stack(struct intr_frame *if_, int argc, char ** argv);
 
 /* General process initializer for initd and other process. */
 static void
@@ -158,12 +164,70 @@ error:
 	thread_exit ();
 }
 
+static void 
+construct_stack(struct intr_frame *if_, int argc, char ** argv)
+{
+	char *addrs[MAX_ARGC];
+	int length;
+	int i;
+	void * rsp;
+
+	rsp = (void *)if_->rsp;
+
+	for(i = argc - 1; i >= 0 ; i--){
+		length = strlen(argv[i])+1;
+		rsp = rsp - length;
+		memcpy(rsp, argv[i], length);
+		addrs[i] = rsp;
+	}
+
+	// word_align
+	while((uintptr_t)rsp % WSIZE != 0){
+		rsp = rsp - 1;
+		*(uint8_t *)rsp = 0;
+	}
+	
+	// argv[argc] == NULL
+	rsp = rsp - WSIZE;
+	*(uint64_t *)rsp = 0;
+
+	for(i = argc - 1; i >= 0 ; i--){
+		rsp = rsp - WSIZE;
+		*(char **)rsp = addrs[i];
+	}
+
+	if_->R.rsi = (uintptr_t)rsp;
+	if_->R.rdi = argc;
+
+	// return address
+	rsp = rsp - WSIZE;
+	*(uint64_t *)rsp = 0;
+	if_->rsp = (uintptr_t)rsp;
+	
+}
+
 /* Switch the current execution context to the f_name.
  * Returns -1 on fail. */
 int
 process_exec (void *f_name) {
-	char *file_name = f_name;
+	char *cmdline;
 	bool success;
+
+	/* parse command line */
+	cmdline = palloc_get_page(PAL_USER);
+	strlcpy(cmdline, f_name, PGSIZE);
+
+	char * save_ptr;
+	char *argv[MAX_ARGC];
+	int argc = 0;
+	char * file_name;
+
+	argv[0] = strtok_r(cmdline, " ", &save_ptr);
+	while(argv[argc] != NULL){
+		argv[++argc] = strtok_r(NULL, " ", &save_ptr);
+	}
+
+	file_name = argv[0];	
 
 	/* We cannot use the intr_frame in the thread structure.
 	 * This is because when current thread rescheduled,
@@ -180,9 +244,12 @@ process_exec (void *f_name) {
 	success = load (file_name, &_if);
 
 	/* If load failed, quit. */
-	palloc_free_page (file_name);
+	palloc_free_page (f_name);
+	palloc_free_page (cmdline);
 	if (!success)
 		return -1;
+
+	construct_stack(&_if, argc, argv);
 
 	/* Start switched process. */
 	do_iret (&_if);
@@ -204,6 +271,7 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
+	while(1);
 	return -1;
 }
 
