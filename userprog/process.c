@@ -170,40 +170,36 @@ construct_stack(struct intr_frame *if_, int argc, char ** argv)
 	char *addrs[MAX_ARGC];
 	int length;
 	int i;
-	void * rsp;
-
-	rsp = (void *)if_->rsp;
-
+	
 	for(i = argc - 1; i >= 0 ; i--){
 		length = strlen(argv[i])+1;
-		rsp = rsp - length;
-		memcpy(rsp, argv[i], length);
-		addrs[i] = rsp;
+		if_->rsp = if_->rsp - length;
+		memcpy(if_->rsp, argv[i], length);
+		addrs[i] = if_->rsp;
 	}
 
 	// word_align
-	while((uintptr_t)rsp % WSIZE != 0){
-		rsp = rsp - 1;
-		*(uint8_t *)rsp = 0;
+	while(if_->rsp % WSIZE != 0){
+		if_->rsp--;
+		*(uint8_t *)(if_->rsp) = 0;
 	}
 	
 	// argv[argc] == NULL
-	rsp = rsp - WSIZE;
-	*(uint64_t *)rsp = 0;
+	if_->rsp = if_->rsp - WSIZE;
+	*(uint64_t *)if_->rsp = 0;
 
 	for(i = argc - 1; i >= 0 ; i--){
-		rsp = rsp - WSIZE;
-		*(char **)rsp = addrs[i];
+		if_->rsp = if_->rsp - WSIZE;
+		memcpy(if_->rsp, &addrs[i], sizeof(char **));
 	}
 
-	if_->R.rsi = (uintptr_t)rsp;
+	if_->R.rsi = if_->rsp;
 	if_->R.rdi = argc;
 
 	// return address
-	rsp = rsp - WSIZE;
-	*(uint64_t *)rsp = 0;
-	if_->rsp = (uintptr_t)rsp;
-	
+	if_->rsp = if_->rsp - WSIZE;
+	*(uint64_t *)if_->rsp = 0;
+		
 }
 
 /* Switch the current execution context to the f_name.
