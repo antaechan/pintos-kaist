@@ -23,6 +23,7 @@
 #endif
 
 #define MAX_ARGC	128		/* implement argument passing */
+#define MAX_ARGU	128
 #define WSIZE		8
 
 static void process_cleanup (void);
@@ -206,11 +207,10 @@ construct_stack(struct intr_frame *if_, int argc, char ** argv)
  * Returns -1 on fail. */
 int
 process_exec (void *f_name) {
-	char *cmdline;
+	char cmdline[MAX_ARGU];
 	bool success;
 
 	/* parse command line */
-	cmdline = palloc_get_page(PAL_USER);
 	strlcpy(cmdline, f_name, PGSIZE);
 
 	char * save_ptr;
@@ -241,7 +241,6 @@ process_exec (void *f_name) {
 
 	/* If load failed, quit. */
 	palloc_free_page (f_name);
-	palloc_free_page (cmdline);
 	if (!success)
 		return -1;
 
