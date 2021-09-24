@@ -118,7 +118,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			break;
 			
 		default:
-			sys_exit(-1);
+			thread_exit();
 			break;
 	}
 
