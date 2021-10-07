@@ -138,7 +138,7 @@ struct fd_t{
 	struct file *file;
 	struct list_elem elem;
 	int fd;
-	} 
+};
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.

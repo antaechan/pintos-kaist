@@ -183,7 +183,7 @@ bool sys_create (const char *file, unsigned initial_size)
 	bool success;
 	check_user_memory(file);
 
-	if(file == NULL) success = false;
+	if(file == NULL) return false;
 
 	lock_acquire(&filesys_lock);
 	success = filesys_create(file, initial_size);
@@ -197,7 +197,7 @@ bool sys_remove (const char *file)
 	bool success;
 	check_user_memory(file);	
 
-	if(file == NULL) success = false;
+	if(file == NULL) return false;
 
 	lock_acquire(&filesys_lock);
 	success = filesys_remove(file);
@@ -255,6 +255,7 @@ int sys_read (int fd, void *buffer, unsigned length){
 	int cnt = 0;
 
 	check_user_memory(buffer);
+	check_user_memory(buffer+length-1);
 
 	lock_acquire(&filesys_lock);
 	switch(fd){
@@ -295,6 +296,7 @@ int sys_write (int fd, const void *buffer, unsigned length){
 	int cnt = 0;
 
 	check_user_memory(buffer);
+	check_user_memory(buffer+length-1);
 
 	lock_acquire(&filesys_lock);
 	switch(fd){
@@ -331,7 +333,7 @@ unsigned sys_tell (int fd){
 	struct file* file;
 	
 	lock_acquire(&filesys_lock);
-	file = convert_fd2file(fd);
+	file = convert_fd2file(fd,thread_current());
 	if(file != NULL) position = file_tell(file);
 	lock_release(&filesys_lock);
 	
