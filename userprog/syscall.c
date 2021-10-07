@@ -229,12 +229,12 @@ int sys_open (const char *file)
 }
 
 /* Obtain a file's size. */
-int sys_filesize (int fd);{
+int sys_filesize (int fd){
 	int length;
 
 	struct file *file = convert_fd2file(fd, thread_current());
 	if(file == NULL) return -1;
-	
+
 	lock_acquire(&filesys_lock);
 	length = file_length(file);
 	lock_release(&filesys_lock);
@@ -414,9 +414,9 @@ static void check_user_memory(void *uaddr)
 	else if(is_kernel_vaddr(uaddr))
 		is_valid = false;
 
-	/* a virtual address not mapped to physical address */
+	/* //a virtual address not mapped to physical address
 	else if(pml4e_walk(thread_current()->pml4, uaddr, false) == NULL)
-		is_valid = false;
+		is_valid = false; */
 	
 	/* handle these cases by terminating the user process 1*/
 	if(!is_valid)
