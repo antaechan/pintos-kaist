@@ -331,7 +331,7 @@ unsigned sys_tell (int fd){
 	struct file* file;
 	
 	lock_acquire(&filesys_lock);
-	file = fd_to_file(fd);
+	file = convert_fd2file(fd);
 	if(file != NULL) position = file_tell(file);
 	lock_release(&filesys_lock);
 	
