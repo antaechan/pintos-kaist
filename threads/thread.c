@@ -308,6 +308,8 @@ thread_exit (void) {
 	process_exit ();
 #endif
 
+	/* release all holding lock */
+
 	/* Just set our status to dying and schedule another process.
 	   We will be destroyed during the call to schedule_tail(). */
 	intr_disable ();
@@ -454,6 +456,7 @@ kernel_thread (thread_func *function, void *aux) {
    NAME. */
 static void
 init_thread (struct thread *t, const char *name, int priority) {
+	
 	ASSERT (t != NULL);
 	ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
 	ASSERT (name != NULL);
@@ -471,11 +474,20 @@ init_thread (struct thread *t, const char *name, int priority) {
 
 	list_push_back(&all_list, &t->allelem);	/* Add allelem to all_list. */
 
-	t->magic = THREAD_MAGIC;
-
 	list_init(&t->donor_list);     /* implement Priority Donation */
 	t->original_priority = priority;
 	t->wait_for_what_lock = NULL;
+
+
+	#ifdef 	USERPROG
+		t->pml4 == NULL;                    
+		t->exit_stat = -1;
+		t->data_bank = NULL;	
+		list_init(&t->child_list);
+	#endif
+
+	t->magic = THREAD_MAGIC;
+
 
 
 }
