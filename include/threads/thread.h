@@ -117,6 +117,9 @@ struct thread {
 	uint64_t *pml4;                     /* Page map level 4 */
 
 	int exit_stat;						/* exit status */
+
+	int max_fd;							/* largest fd */
+	struct list fd_list;				/* list of fd*/
 	
 	struct process_data_bank *data_bank;	/* process important information store */
 	struct list child_list;
@@ -130,6 +133,13 @@ struct thread {
 	/* Owned by thread.c. */
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
+};
+
+/* fd of thread */
+struct fd_t{
+	struct file *file;
+	struct list_elem elem;
+	int fd;
 };
 
 /* If false (default), use round-robin scheduler.

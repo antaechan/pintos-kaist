@@ -21,6 +21,11 @@ void sys_seek (int fd, unsigned position);
 unsigned sys_tell (int fd);
 void sys_close (int fd);
 
+struct lock *filesys_lock;
+struct file *convert_fd2file(int fd, struct thread *thread);
+int insert_file2list(struct file *file, struct thread *thread);
+void delete_file2list(int fd, struct thread *thread);
+
 /* Extra Credit */
 int sys_dup2(int oldfd, int newfd);
 /* Projects 2 and later. ------------------------------------*/

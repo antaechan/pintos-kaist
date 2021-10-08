@@ -478,6 +478,11 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->original_priority = priority;
 	t->wait_for_what_lock = NULL;
 
+#ifdef USERPROG
+	list_init(&t->fd_list);
+	t->max_fd = 2;
+#endif
+
 
 	#ifdef 	USERPROG
 		t->pml4 == NULL;                    
