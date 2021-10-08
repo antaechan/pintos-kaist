@@ -12,11 +12,15 @@
 #include "threads/init.h"
 #include "userprog/process.h"
 #include "threads/synch.h"
+#include "filesys/file.h"
+#include "filesys/filesys.h"
+#include "threads/palloc.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 
 static void check_user_memory(void *uaddr);
+
 
 /* System call.
  *
@@ -37,6 +41,8 @@ static void check_user_memory(void *uaddr);
 
 void
 syscall_init (void) {
+	
+	lock_init(&filesys_lock);
 	write_msr(MSR_STAR, ((uint64_t)SEL_UCSEG - 0x10) << 48  |
 			((uint64_t)SEL_KCSEG) << 32);
 	write_msr(MSR_LSTAR, (uint64_t) syscall_entry);
@@ -162,7 +168,10 @@ tid_t sys_fork (const char *thread_name, struct intr_frame *f)
 /* Switch current process. */
 int sys_exec (const char *cmdline){
 	check_user_memory(cmdline);
+
+	lock_acquire(&filesys_lock);
 	tid_t tid = process_exec(cmdline);
+	lock_release(&filesys_lock);
 
 	/* if program cannot load or run for any reason, terminate */
 	if(tid == -1){
@@ -180,10 +189,8 @@ int sys_wait (tid_t child_id){
 /* Create a file. */
 bool sys_create (const char *file, unsigned initial_size)
 {
-	bool success;
 	check_user_memory(file);
-
-	if(file == NULL) return false;
+	bool success;
 
 	lock_acquire(&filesys_lock);
 	success = filesys_create(file, initial_size);
@@ -194,10 +201,9 @@ bool sys_create (const char *file, unsigned initial_size)
 /* Delete a file. */
 bool sys_remove (const char *file)
 {
-	bool success;
-	check_user_memory(file);	
+	check_user_memory(file);
 
-	if(file == NULL) return false;
+	bool success;
 
 	lock_acquire(&filesys_lock);
 	success = filesys_remove(file);
@@ -208,12 +214,9 @@ bool sys_remove (const char *file)
 /* Open a file. */
 int sys_open (const char *file)
 {
+	check_user_memory(file);
 	struct file *open_file;
 	int fd;
-
-	check_user_memory(file);
-
-	if(file == NULL) return -1;
 
 	lock_acquire(&filesys_lock);
 	open_file = filesys_open(file); 
@@ -230,12 +233,15 @@ int sys_open (const char *file)
 
 /* Obtain a file's size. */
 int sys_filesize (int fd){
+	struct file *file;
 	int length;
 
-	struct file *file = convert_fd2file(fd, thread_current());
-	if(file == NULL) return -1;
-
 	lock_acquire(&filesys_lock);
+	file = convert_fd2file(fd, thread_current());
+	if(file == NULL){
+		lock_release(&filesys_lock);
+		return -1;
+	}
 	length = file_length(file);
 	lock_release(&filesys_lock);
 	
@@ -245,161 +251,185 @@ int sys_filesize (int fd){
 /* Read from a file. */
 int sys_read (int fd, void *buffer, unsigned length){
 	
-	// /* for all buffer bytes, check user memory */
-	// while(){
-	// 	check_user_memory(ptr);
-
-	// }
 	struct file *file;
-	char *ptr = (char*)buffer;
-	int cnt = 0;
+	char *ptr = (char *)buffer;
+	int cnt;
 
-	check_user_memory(buffer);
-	check_user_memory(buffer+length-1);
+	check_user_memory(ptr);
+	check_user_memory(ptr + length - 1);
 
 	lock_acquire(&filesys_lock);
-	switch(fd){
+
+	switch(fd)
+	{
 		case STDIN_FILENO:
-			ptr[cnt] = input_getc();
-			cnt++;
-			for (cnt; cnt<length; cnt++){
-				if(ptr[cnt]=='\n'){
-					ptr[cnt]=NULL;
+			for (cnt = 0; cnt < length; cnt++)
+			{
+				*(ptr + cnt) = input_getc();
+				if( *(ptr + cnt) == '\n')
+				{
+					*(ptr + cnt) = NULL;
 					break;
 				}
-				ptr[cnt] = input_getc();
 			}
-			ptr[cnt]=NULL;
+			check_user_memory(ptr + length);
+			*(ptr + cnt) = NULL;
+			break;
 
 		default:
-			file=convert_fd2file(fd, thread_current());
+			file = convert_fd2file(fd, thread_current());
 			if(file == NULL){
-				cnt=-1;
+				cnt = -1;
 				break;
 			}
+				
 			cnt = file_read(file, buffer, length);
+			break;
 	}
-	lock_release(&filesys_lock);
 
+	lock_release(&filesys_lock);
 	return cnt;
 }
 
 /* Write to a file. */
 int sys_write (int fd, const void *buffer, unsigned length){
-	// void *ptr = buffer;
-	// /* for all buffer bytes, check user memory */
-	// while(){
-	// 	check_user_memory(ptr);
-
-	// }
+	
 	struct file *file;
 	int cnt = 0;
 
 	check_user_memory(buffer);
-	check_user_memory(buffer+length-1);
+	check_user_memory(buffer + length - 1);
 
 	lock_acquire(&filesys_lock);
 	switch(fd){
 		case STDOUT_FILENO:
-			pufbuf((const char *)buffer, length);
+			putbuf((const char *)buffer, length);
 			cnt = length;
+			break;
 		
 		default:
 			file = convert_fd2file(fd, thread_current());
 			if(file == NULL){
-				cnt=-1;
+				cnt = -1;
 				break;
 			}
 			cnt = file_write(fd, buffer, length);
+			break;
 	}
-	lock_release(&filesys_lock);
 
+	lock_release(&filesys_lock);
 	return cnt;
 }
 
 /* Change position in a file. */
 void sys_seek (int fd, unsigned position){
+
 	struct file* file;
 
 	lock_acquire(&filesys_lock);
 	file = convert_fd2file(fd, thread_current());
 	if(file != NULL) file_seek(file, position);
 	lock_release(&filesys_lock);
+
 }
 
 /* Report current position in a file. */
 unsigned sys_tell (int fd){
-	unsigned position = 0;
+	unsigned position;
 	struct file* file;
 	
 	lock_acquire(&filesys_lock);
-	file = convert_fd2file(fd,thread_current());
-	if(file != NULL) position = file_tell(file);
+	file = convert_fd2file(fd, thread_current());
+	if(file != NULL){
+		position = file_tell(file);
+	}
+	else{
+		position = -1;
+	}
+
 	lock_release(&filesys_lock);
-	
 	return position;
 }
 
 /* Close a file. */
 void sys_close (int fd){
+	
 	struct file *file;
-
-	file = convert_fd2file(fd, thread_current());
-	if (file==NULL || fd<2) return;
 	lock_acquire(&filesys_lock);
+	
+	file = convert_fd2file(fd, thread_current());
+	if (file == NULL)
+	{
+		lock_release(&filesys_lock);
+		return;
+	}
+		
 	file_close(file);
 	// delete file to list
 	delete_file2list(fd, thread_current());
 	lock_release(&filesys_lock);
 }
 
-/* convert fd to file with fd_list*/
+/* return opened file which has file descriptor fd,
+ if not exist, then return NULL */
 struct file *convert_fd2file(int fd, struct thread *thread){
 	struct thread *t = thread;
 	struct list_elem *e;
 	struct fd_t *fd_t;
 
-	if(fd < 2 || fd >= t->max_fd) return NULL;
+	if((fd <= 2) || (fd >= t->next_fd)) return NULL;
 
-	for(e=list_begin(&t->fd_list); e!=list_end(&t->fd_list); e=list_next(e)){
+	for(e = list_begin(&t->fd_list); e != list_end(&t->fd_list); e = list_next(e))
+	{
 		fd_t = list_entry(e, struct fd_t, elem);
 		if(fd_t->fd == fd) return fd_t->file;
 	}
+	return NULL;
 }
 
-/* insert file to fd_list and increase max_fd */
+/* insert file to fd_list and increase next_fd */
 int insert_file2list(struct file *file, struct thread *thread){
 	struct thread *t = thread;
 	int fd;
-	struct fd_t *fd_t;
 
-	fd = t->max_fd++;
+	struct fd_t *fd_t = (struct fd_t *)palloc_get_page(PAL_USER);
+	if(fd_t == NULL)
+		return -1;
+	
+	fd = t->next_fd++;
 	fd_t->fd = fd;
 	fd_t->file = file;
-	list_push_front(&t->fd_list, &fd_t->elem);
-
+	list_push_back(&t->fd_list, &fd_t->elem);
 	return fd;
 }
 
-/* delete file to fd_list and decrease max_fd */
+/* delete file to fd_list and decrease next_fd */
 void delete_file2list(int fd, struct thread *thread){
 	struct thread *t = thread;
 	struct list_elem *e;
 	struct fd_t *fd_t;
 
-	for(e=list_begin(&t->fd_list); e!=list_end(&t->fd_list); e=list_next(e)){
+	for(e = list_begin(&t->fd_list); e != list_end(&t->fd_list); e = list_next(e))
+	{
 		fd_t = list_entry(e, struct fd_t, elem);
-		if(fd_t->fd == fd){
+		if(fd_t->fd == fd)
+		{
 			list_remove(e);
+			palloc_free_page(fd_t);
 			break;
-			}
+		}
 	}
+
+	return;
 }
 
 
 /* ----------------- Extra Credit -------------------------- */
 /* Duplicate the file descriptor */
-int sys_dup2(int oldfd, int newfd);
+int sys_dup2(int oldfd, int newfd)
+{
+	return 1;
+}
 /* Projects 2 and later. ----------------------------------- */
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
 

@@ -479,21 +479,17 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->wait_for_what_lock = NULL;
 
 #ifdef USERPROG
+	t->pml4 == NULL;                    
+	t->exit_stat = -1;
+	t->data_bank = NULL;	
+	list_init(&t->child_list);
+	
 	list_init(&t->fd_list);
-	t->max_fd = 2;
+	t->next_fd = 3;
 #endif
 
 
-	#ifdef 	USERPROG
-		t->pml4 == NULL;                    
-		t->exit_stat = -1;
-		t->data_bank = NULL;	
-		list_init(&t->child_list);
-	#endif
-
 	t->magic = THREAD_MAGIC;
-
-
 
 }
 
