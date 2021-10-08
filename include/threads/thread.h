@@ -120,6 +120,7 @@ struct thread {
 
 	int max_fd;							/* largest fd */
 	struct list fd_list;				/* list of fd*/
+	struct file *running_file;			/* file that runs currently */
 	
 
 #endif
