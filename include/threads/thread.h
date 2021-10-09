@@ -119,6 +119,7 @@ struct thread {
 
 	int next_fd;						/* next fd to insert */
 	struct list fd_list;				/* list of fd*/
+	struct file *running_file;			/* file that runs currently */
 	
 	struct process_data_bank *data_bank;	/* process important information store */
 	struct list child_list;

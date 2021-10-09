@@ -9,6 +9,8 @@
 struct file *convert_fd2file(int fd, struct thread *thread);
 int insert_file2list(struct file *file, struct thread *thread);
 void delete_file2list(int fd, struct thread *thread);
+struct fd_t *convert_fd2fd_t(int fd, struct thread *thread);
+bool is_same_file(int fd1, int fd2);
 
 void syscall_init (void);
 
@@ -27,8 +29,6 @@ int sys_write (int fd, const void *buffer, unsigned length);
 void sys_seek (int fd, unsigned position);
 unsigned sys_tell (int fd);
 void sys_close (int fd);
-
-
 
 /* Extra Credit */
 int sys_dup2(int oldfd, int newfd);

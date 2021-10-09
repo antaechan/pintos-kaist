@@ -14,9 +14,12 @@
 #include "threads/synch.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+<<<<<<< HEAD
 #include "threads/palloc.h"
 
 struct lock *filesys_lock;
+=======
+>>>>>>> dup2
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -389,7 +392,25 @@ struct file *convert_fd2file(int fd, struct thread *thread){
 	return NULL;
 }
 
+<<<<<<< HEAD
 /* insert file to fd_list and increase next_fd */
+=======
+/* convert fd to fd_t with fd_list*/
+struct fd_t *convert_fd2fd_t(int fd, struct thread *thread){
+	struct thread *t = thread;
+	struct list_elem *e;
+	struct fd_t *fd_t;
+
+	if(fd < 2 || fd >= t->max_fd) return NULL;
+
+	for(e=list_begin(&t->fd_list); e!=list_end(&t->fd_list); e=list_next(e)){
+		fd_t = list_entry(e, struct fd_t, elem);
+		if(fd_t->fd == fd) return fd_t;
+	}
+}
+
+/* insert file to fd_list and increase max_fd */
+>>>>>>> dup2
 int insert_file2list(struct file *file, struct thread *thread){
 	struct thread *t = thread;
 	int fd;
@@ -425,12 +446,58 @@ void delete_file2list(int fd, struct thread *thread){
 	return;
 }
 
+/* compare file f1(with fd1) with f2(with fd2), and return true if same, otherwise return false */
+bool is_same_file(int fd1, int fd2){
+	struct file *f1 = convert_fd2file(fd1, thread_current());
+	struct file *f2 = convert_fd2file(fd2, thread_current());
+	bool inode = (&f1->inode == &f2->inode);
+	bool pos = (f1->pos == f2->pos);
+	bool deny_write = (f1->deny_write == f2->deny_write);
+
+	return inode & pos & deny_write;
+}
+
 
 /* ----------------- Extra Credit -------------------------- */
 /* Duplicate the file descriptor */
+<<<<<<< HEAD
 int sys_dup2(int oldfd, int newfd)
 {
 	return 1;
+=======
+int sys_dup2(int oldfd, int newfd){
+	struct thread *t = thread_current();
+	struct file *old_file;
+	// struct file *new_file;
+	// struct fd_t *old_fd_t;
+	struct fd_t *new_fd_t;
+	struct fd_t *fd_t;
+
+	/* check oldfd */
+	if(oldfd < 2 || oldfd >= t->max_fd) return -1;
+
+	old_file = convert_fd2file(oldfd, thread_current());
+	if(old_file == NULL) return -1;
+
+	/* if oldfd and newfd have same value, then return newfd */
+	if((oldfd == newfd) && is_same_file(oldfd, newfd)) return newfd;
+
+	/* if newfd is opened, then close it */
+	new_fd_t = convert_fd2fd_t(newfd, thread_current());
+	if(new_fd_t != NULL) sys_close(newfd);
+
+	/* if newfd is bigger than t->max_fd, then change it to newfd */
+	if(newfd > t->max_fd) t->max_fd = newfd;
+	else delete_file2list(newfd, thread_current());
+
+	/* duplicate it */
+	fd_t = (struct fd_t*)malloc(sizeof(struct fd_t*));
+	fd_t->fd = newfd;
+	fd_t->file = file_duplicate(old_file);
+	list_push_back(&t->fd_list, &fd_t->elem);
+
+	return newfd;
+>>>>>>> dup2
 }
 /* Projects 2 and later. ----------------------------------- */
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
