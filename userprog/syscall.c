@@ -14,12 +14,7 @@
 #include "threads/synch.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
-<<<<<<< HEAD
 #include "threads/palloc.h"
-
-struct lock *filesys_lock;
-=======
->>>>>>> dup2
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -174,9 +169,8 @@ tid_t sys_fork (const char *thread_name, struct intr_frame *f)
 int sys_exec (const char *cmdline){
 	check_user_memory(cmdline);
 
-	lock_acquire(&filesys_lock);
+	/* lock synchronization exist in process_exec */
 	tid_t tid = process_exec(cmdline);
-	lock_release(&filesys_lock);
 
 	/* if program cannot load or run for any reason, terminate */
 	if(tid == -1){
@@ -392,16 +386,14 @@ struct file *convert_fd2file(int fd, struct thread *thread){
 	return NULL;
 }
 
-<<<<<<< HEAD
-/* insert file to fd_list and increase next_fd */
-=======
+
 /* convert fd to fd_t with fd_list*/
 struct fd_t *convert_fd2fd_t(int fd, struct thread *thread){
 	struct thread *t = thread;
 	struct list_elem *e;
 	struct fd_t *fd_t;
 
-	if(fd < 2 || fd >= t->max_fd) return NULL;
+	if(fd < 2 || fd >= t->next_fd) return NULL;
 
 	for(e=list_begin(&t->fd_list); e!=list_end(&t->fd_list); e=list_next(e)){
 		fd_t = list_entry(e, struct fd_t, elem);
@@ -409,8 +401,7 @@ struct fd_t *convert_fd2fd_t(int fd, struct thread *thread){
 	}
 }
 
-/* insert file to fd_list and increase max_fd */
->>>>>>> dup2
+/* insert file to fd_list and increase next_fd */
 int insert_file2list(struct file *file, struct thread *thread){
 	struct thread *t = thread;
 	int fd;
@@ -460,11 +451,6 @@ bool is_same_file(int fd1, int fd2){
 
 /* ----------------- Extra Credit -------------------------- */
 /* Duplicate the file descriptor */
-<<<<<<< HEAD
-int sys_dup2(int oldfd, int newfd)
-{
-	return 1;
-=======
 int sys_dup2(int oldfd, int newfd){
 	struct thread *t = thread_current();
 	struct file *old_file;
@@ -474,7 +460,7 @@ int sys_dup2(int oldfd, int newfd){
 	struct fd_t *fd_t;
 
 	/* check oldfd */
-	if(oldfd < 2 || oldfd >= t->max_fd) return -1;
+	if(oldfd < 2 || oldfd >= t->next_fd) return -1;
 
 	old_file = convert_fd2file(oldfd, thread_current());
 	if(old_file == NULL) return -1;
@@ -486,8 +472,8 @@ int sys_dup2(int oldfd, int newfd){
 	new_fd_t = convert_fd2fd_t(newfd, thread_current());
 	if(new_fd_t != NULL) sys_close(newfd);
 
-	/* if newfd is bigger than t->max_fd, then change it to newfd */
-	if(newfd > t->max_fd) t->max_fd = newfd;
+	/* if newfd is bigger than t->next_fd, then change it to newfd */
+	if(newfd > t->next_fd) t->next_fd = newfd;
 	else delete_file2list(newfd, thread_current());
 
 	/* duplicate it */
@@ -497,7 +483,6 @@ int sys_dup2(int oldfd, int newfd){
 	list_push_back(&t->fd_list, &fd_t->elem);
 
 	return newfd;
->>>>>>> dup2
 }
 /* Projects 2 and later. ----------------------------------- */
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             

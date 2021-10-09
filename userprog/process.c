@@ -458,12 +458,19 @@ process_exit (void) {
 	 * TODO: We recommend you to implement process resource cleanup here. */
 
 	/* 1. close all open file */
-	int max_fd = --curr->next_fd;
-	for(max_fd; max_fd>2; max_fd--)
-		sys_close(max_fd);
-
+	struct list *fd_list = &curr->fd_list;
+	while(!list_empty(fd_list))
+	{
+		struct list_elem *e = list_pop_front(fd_list);
+		struct fd_t *fd_t = list_entry(e, struct fd_t, elem);
+		file_close(fd_t->file);
+		palloc_free_page(fd_t);
+	}
+	
 	/* 2. close running file */
-	if(curr->running_file != NULL) file_close(curr->running_file);
+	if(curr->running_file != NULL)
+	 	/* file_allow_write() located in file_close() */
+		file_close(curr->running_file);
 
 	/* 3. clean up process_data_bank of child_list */
 	
@@ -496,6 +503,7 @@ process_exit (void) {
 	if(curr_orphan){
 		palloc_free_page(curr_bank);
 	}
+	
 	process_cleanup ();
 }
 

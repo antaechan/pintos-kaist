@@ -3,12 +3,13 @@
 
 #include <stdbool.h>
 #include "filesys/off_t.h"
-
-struct lock *filesys_lock;
+#include "filesys/filesys.h"
 
 /* Sectors of system file inodes. */
 #define FREE_MAP_SECTOR 0       /* Free map file inode sector. */
 #define ROOT_DIR_SECTOR 1       /* Root directory file inode sector. */
+
+struct lock *filesys_lock;
 
 /* Disk used for file system. */
 extern struct disk *filesys_disk;
