@@ -3,6 +3,8 @@
 
 #include <stdbool.h>
 #include "threads/thread.h"
+#include "threads/interrupt.h"
+#include "filesys/file.h"
 
 struct file *convert_fd2file(int fd, struct thread *thread);
 int insert_file2list(struct file *file, struct thread *thread);

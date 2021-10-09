@@ -16,6 +16,8 @@
 #include "filesys/filesys.h"
 #include "threads/palloc.h"
 
+struct lock *filesys_lock;
+
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 
