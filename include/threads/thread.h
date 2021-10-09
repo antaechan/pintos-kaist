@@ -138,8 +138,9 @@ struct thread {
 /* fd of thread */
 struct fd_t{
 	struct file *file;
-	struct list_elem elem;
 	int fd;
+	
+	struct list_elem elem;
 };
 
 /* If false (default), use round-robin scheduler.

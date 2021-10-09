@@ -261,17 +261,33 @@ __do_fork (void *aux) {
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
-	
+	struct list_elem *e;
+	struct fd_t *parent_fd_t;
 
-	
+	if(!list_empty(&parent->fd_list))
+	{
+		for(e = list_front(&parent->fd_list); e != list_end(&parent->fd_list); e = list_next(e))
+		{
+			parent_fd_t = list_entry(e, struct fd_t, elem);
+			struct fd_t *curr_fd_t = palloc_get_page(PAL_USER);
+			if(curr_fd_t == NULL)
+				goto error;
+				
+			curr_fd_t->file = file_duplicate(parent_fd_t->file);
+			curr_fd_t->fd = parent_fd_t->fd;
 
+			list_push_back(&current->fd_list, &curr_fd_t->elem);
+		}
+	}
+	current->next_fd = parent->next_fd;
+	/* Concern: running_file duplicate ?? */
+	
 	/* Finally, switch to the newly created process. */
 	child_bank->fork_succ = true;
 	sema_up(&child_bank->sema_fork);
 	if_.R.rax = 0;
 	do_iret (&if_);
 	
-
 error:
 	child_bank->fork_succ = false;
 	sema_up(&child_bank->sema_fork);
@@ -392,15 +408,15 @@ process_wait (tid_t child_tid UNUSED) {
 
 	int exit_stat;
 	struct thread *parent = thread_current();
-	struct list child_list = parent->child_list;
+	struct list *child_list = &parent->child_list;
 	struct list_elem *e;
 
 	struct process_data_bank *child_bank = NULL;
 	struct process_data_bank *bank;
 
-	if(!list_empty(&child_list))
+	if(!list_empty(child_list))
 	{
-		for(e = list_front(&child_list); e = list_end(&child_list); e = list_next(e))
+		for(e = list_front(child_list); e = list_end(child_list); e = list_next(e))
 		{
 			bank = list_entry(e, struct process_data_bank, elem);
 			if(bank->tid == child_tid){
@@ -477,11 +493,11 @@ process_exit (void) {
 	/* parent process doesn't wait child process and exit,
 	therefore, no need to hold child_list process_data_bank memory */
 	struct list_elem *e;
-	struct list child_list = curr->child_list;
+	struct list *child_list = &curr->child_list;
 	struct process_data_bank *bank;
-	if(!list_empty(&child_list))
+	if(!list_empty(child_list))
 	{
-		e = list_pop_front(&child_list);
+		e = list_pop_front(child_list);
 		bank = list_entry(e, struct process_data_bank, elem);
 		
 		/* no need to wait parent process, parent is also terminated */
@@ -503,7 +519,7 @@ process_exit (void) {
 	if(curr_orphan){
 		palloc_free_page(curr_bank);
 	}
-	
+
 	process_cleanup ();
 }
 
