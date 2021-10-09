@@ -457,6 +457,8 @@ kernel_thread (thread_func *function, void *aux) {
 static void
 init_thread (struct thread *t, const char *name, int priority) {
 	
+	enum intr_level old_level;
+	
 	ASSERT (t != NULL);
 	ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
 	ASSERT (name != NULL);
@@ -472,7 +474,9 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->nice = 0;				/* implement Advanced Scheduler */
 	t->recent_cpu = 0;
 
+	old_level = intr_disable();
 	list_push_back(&all_list, &t->allelem);	/* Add allelem to all_list. */
+	intr_set_level(old_level);
 
 	list_init(&t->donor_list);     /* implement Priority Donation */
 	t->original_priority = priority;
@@ -486,6 +490,8 @@ init_thread (struct thread *t, const char *name, int priority) {
 	
 	list_init(&t->fd_list);
 	t->next_fd = 3;
+	t->running_file = NULL;
+
 #endif
 
 
