@@ -393,7 +393,7 @@ struct fd_t *convert_fd2fd_t(int fd, struct thread *thread){
 	struct list_elem *e;
 	struct fd_t *fd_t;
 
-	if(fd < 2 || fd >= t->next_fd) return NULL;
+	if((fd <= 2) || fd >= t->next_fd) return NULL;
 
 	for(e=list_begin(&t->fd_list); e!=list_end(&t->fd_list); e=list_next(e)){
 		fd_t = list_entry(e, struct fd_t, elem);
@@ -454,13 +454,11 @@ bool is_same_file(int fd1, int fd2){
 int sys_dup2(int oldfd, int newfd){
 	struct thread *t = thread_current();
 	struct file *old_file;
-	// struct file *new_file;
-	// struct fd_t *old_fd_t;
 	struct fd_t *new_fd_t;
 	struct fd_t *fd_t;
 
 	/* check oldfd */
-	if(oldfd < 2 || oldfd >= t->next_fd) return -1;
+	if((oldfd <= 2) || (oldfd >= t->next_fd)) return -1;
 
 	old_file = convert_fd2file(oldfd, thread_current());
 	if(old_file == NULL) return -1;
@@ -473,7 +471,7 @@ int sys_dup2(int oldfd, int newfd){
 	if(new_fd_t != NULL) sys_close(newfd);
 
 	/* if newfd is bigger than t->next_fd, then change it to newfd */
-	if(newfd > t->next_fd) t->next_fd = newfd;
+	if(newfd >= t->next_fd) t->next_fd = newfd;
 	else delete_file2list(newfd, thread_current());
 
 	/* duplicate it */
