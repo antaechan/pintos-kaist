@@ -416,7 +416,7 @@ process_wait (tid_t child_tid UNUSED) {
 
 	if(!list_empty(child_list))
 	{
-		for(e = list_front(child_list); e = list_end(child_list); e = list_next(e))
+		for(e = list_front(child_list); e != list_end(child_list); e = list_next(e))
 		{
 			bank = list_entry(e, struct process_data_bank, elem);
 			if(bank->tid == child_tid){

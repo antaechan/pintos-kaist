@@ -483,7 +483,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->wait_for_what_lock = NULL;
 
 #ifdef USERPROG
-	t->pml4 == NULL;                    
+	                 
 	t->exit_stat = -1;
 	t->data_bank = NULL;	
 	list_init(&t->child_list);
