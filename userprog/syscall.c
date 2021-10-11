@@ -413,7 +413,7 @@ int insert_file2list(struct file *file, struct thread *thread){
 	struct thread *t = thread;
 	int fd;
 
-	struct fd_t *fd_t = (struct fd_t *)palloc_get_page(PAL_USER);
+	struct fd_t *fd_t = (struct fd_t *)palloc_get_page(0);
 	if(fd_t == NULL)
 		return -1;
 	
@@ -505,9 +505,9 @@ static void check_user_memory(void *uaddr)
 	else if(is_kernel_vaddr(uaddr))
 		is_valid = false;
 
-	/* //a virtual address not mapped to physical address
+	//a virtual address not mapped to physical address
 	else if(pml4e_walk(thread_current()->pml4, uaddr, false) == NULL)
-		is_valid = false; */
+		is_valid = false;
 	
 	/* handle these cases by terminating the user process 1*/
 	if(!is_valid)

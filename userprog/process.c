@@ -20,6 +20,7 @@
 #include "intrinsic.h"
 #include "userprog/syscall.h"
 #include "threads/synch.h"
+#include <list.h>
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -65,7 +66,7 @@ process_create_initd (const char *cmdline) {
 	file_name = strtok_r(cmdline, " ", &save_ptr);
 	
 	/* make process_memory_block */
-	child_bank = palloc_get_page(PAL_USER);
+	child_bank = palloc_get_page(0);
 	if(child_bank == NULL)
 		goto error;
 	
@@ -92,7 +93,7 @@ process_create_initd (const char *cmdline) {
 	/* after copy cmdline_copy data in process_exec(), freed it */
 	sema_down(&child_bank->sema_init);
 	if(cmdline_copy) palloc_free_page(cmdline_copy);
-	
+
 	list_push_back(&thread_current()->child_list, &child_bank->elem);
 	return tid;
 
@@ -133,7 +134,7 @@ process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 		
 	/* make process_memory_block */
 	struct process_data_bank *child_bank = NULL;
-	child_bank = palloc_get_page(PAL_USER);
+	child_bank = palloc_get_page(0);
 	if(child_bank == NULL)
 		goto error;
 
@@ -195,7 +196,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
-	newpage = palloc_get_page(PAL_USER);
+	newpage = palloc_get_page(0);
 	if(!newpage) return false;
 
 	/* 4. TODO: Duplicate parent's page to the new page and
@@ -269,7 +270,7 @@ __do_fork (void *aux) {
 		for(e = list_front(&parent->fd_list); e != list_end(&parent->fd_list); e = list_next(e))
 		{
 			parent_fd_t = list_entry(e, struct fd_t, elem);
-			struct fd_t *curr_fd_t = palloc_get_page(PAL_USER);
+			struct fd_t *curr_fd_t = palloc_get_page(0);
 			if(curr_fd_t == NULL)
 				goto error;
 				
@@ -469,11 +470,15 @@ void
 process_exit (void) {
 	struct thread *curr = thread_current ();
 	struct process_data_bank *curr_bank = curr->data_bank;
+	
+	if(curr_bank == NULL)
+		return;
 	/* TODO: Your code goes here.
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
-
+	
+	
 	/* 1. close all open file */
 	struct list *fd_list = &curr->fd_list;
 	while(!list_empty(fd_list))
