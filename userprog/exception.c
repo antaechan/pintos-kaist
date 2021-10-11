@@ -149,9 +149,6 @@ page_fault (struct intr_frame *f) {
 	if(fault_addr==NULL || fault_addr>=KERN_BASE)
 		sys_exit(-1);
 	
-	if(!user)
-		sys_exit(-1);
-	
 	if(not_present)
 		sys_exit(-1);
 
