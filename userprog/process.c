@@ -356,7 +356,11 @@ process_exec (void *f_name) {
 	/* after copying data into cmdline, 
 		we can free cmdline_copy in process_create_initd */
 	if(cur_bank->init_mark)
+	{
+		cur_bank->init_mark = false;
 		sema_up(&cur_bank->sema_init);
+	}
+	
 
 	argv[0] = strtok_r(cmdline, " ", &save_ptr);
 	while(argv[argc] != NULL){
@@ -646,9 +650,11 @@ load (const char *file_name, struct intr_frame *if_) {
 	if (t->pml4 == NULL)
 		goto done;
 	process_activate (thread_current ());
-
+	
 	/* Open executable file. */
+	lock_acquire(&filesys_lock);
 	file = filesys_open (file_name);
+	
 	
 	if (file == NULL) {
 		printf ("load: %s: open failed\n", file_name);
@@ -738,7 +744,7 @@ load (const char *file_name, struct intr_frame *if_) {
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	
+	lock_release(&filesys_lock);
 	return success;
 }
 
