@@ -484,7 +484,6 @@ init_thread (struct thread *t, const char *name, int priority) {
 
 #ifdef USERPROG
 	                 
-	t->exit_stat = -1;
 	t->data_bank = NULL;	
 	list_init(&t->child_list);
 	

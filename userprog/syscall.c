@@ -16,8 +16,6 @@
 #include "filesys/filesys.h"
 #include "threads/palloc.h"
 
-
-
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 
@@ -72,10 +70,12 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	{
 		case SYS_HALT:              	 
 			sys_halt();
+			NOT_REACHED();
 			break;
 
 		case SYS_EXIT:                   
 			sys_exit(arg1);
+			NOT_REACHED();
 			break;
 
 		case SYS_FORK:                   
@@ -150,8 +150,11 @@ void sys_halt (void){
 void sys_exit (int status)
 {
 	struct thread * cur = thread_current();
-	/* 1. store exit_stat  */
-	cur->exit_stat = status;
+	/* 1. store exit_stat in bank */
+	
+  	if(cur->data_bank != NULL) {
+    	cur->data_bank->exit_stat = status;
+  	}
 
 	/* 2. termination message */
 	printf ("%s: exit(%d)\n", cur->name, status);

@@ -115,7 +115,6 @@ struct thread {
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
-	int exit_stat;						/* exit status */
 
 	int next_fd;						/* next fd to insert */
 	struct list fd_list;				/* list of fd*/

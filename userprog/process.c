@@ -287,6 +287,7 @@ __do_fork (void *aux) {
 	sema_up(&child_bank->sema_fork);
 	if_.R.rax = 0;
 	do_iret (&if_);
+	return;
 	
 error:
 	child_bank->fork_succ = false;
@@ -483,19 +484,14 @@ process_exit (void) {
 		palloc_free_page(fd_t);
 	}
 	
-	/* 2. close running file */
-	if(curr->running_file != NULL)
-	 	/* file_allow_write() located in file_close() */
-		file_close(curr->running_file);
-
-	/* 3. clean up process_data_bank of child_list */
+	/* 2. clean up process_data_bank of child_list */
 	
 	/* parent process doesn't wait child process and exit,
 	therefore, no need to hold child_list process_data_bank memory */
 	struct list_elem *e;
 	struct list *child_list = &curr->child_list;
 	struct process_data_bank *bank;
-	if(!list_empty(child_list))
+	while(!list_empty(child_list))
 	{
 		e = list_pop_front(child_list);
 		bank = list_entry(e, struct process_data_bank, elem);
@@ -506,12 +502,19 @@ process_exit (void) {
 		}
 		else{
 			bank->orphan = true;
-		}		
+		}
 	}
 
-	bool curr_orphan = curr_bank->orphan;
-	curr_bank->exit_stat = curr->exit_stat;
+	/* 3. close running file */
+	if(curr->running_file != NULL)
+	{
+	 	/* file_allow_write() located in file_close() */
+		file_allow_write(curr->running_file);
+		file_close(curr->running_file);
+	}
+
 	curr_bank->exit_mark = true;
+	bool curr_orphan = curr_bank->orphan;
 	sema_up(&curr_bank->sema_wait);
 
 	/* 4. if current process has left alone and has no parent, 
@@ -639,12 +642,12 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	process_activate (thread_current ());
 
-	lock_acquire(&filesys_lock);
+	//lock_acquire(&filesys_lock);
 	/* Open executable file. */
 	file = filesys_open (file_name);
 	
 	if (file == NULL) {
-		lock_release(&filesys_lock);
+		//lock_release(&filesys_lock);
 		printf ("load: %s: open failed\n", file_name);
 		goto done;
 	}
@@ -652,7 +655,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* Deny Write On Excutables */
 	t->running_file = file;
 	file_deny_write(file);
-	lock_release(&filesys_lock);
+	//lock_release(&filesys_lock);
 
 	/* Read and verify executable header. */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
