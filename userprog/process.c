@@ -642,20 +642,13 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	process_activate (thread_current ());
 
-	//lock_acquire(&filesys_lock);
 	/* Open executable file. */
 	file = filesys_open (file_name);
 	
 	if (file == NULL) {
-		//lock_release(&filesys_lock);
 		printf ("load: %s: open failed\n", file_name);
 		goto done;
 	}
-
-	/* Deny Write On Excutables */
-	t->running_file = file;
-	file_deny_write(file);
-	//lock_release(&filesys_lock);
 
 	/* Read and verify executable header. */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -729,6 +722,10 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
 
+	/* Deny Write On Excutables */
+	file_deny_write(file);
+	t->running_file = file;
+
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 	
@@ -736,7 +733,7 @@ load (const char *file_name, struct intr_frame *if_) {
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	file_close (file);
+	
 	return success;
 }
 

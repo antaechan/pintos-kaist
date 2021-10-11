@@ -174,8 +174,10 @@ tid_t sys_fork (const char *thread_name, struct intr_frame *f)
 int sys_exec (const char *cmdline){
 	check_user_memory(cmdline);
 
+	lock_acquire(&filesys_lock);
 	/* lock synchronization exist in process_exec */
 	tid_t tid = process_exec(cmdline);
+	lock_release(&filesys_lock);
 
 	/* if program cannot load or run for any reason, terminate */
 	if(tid == -1){
