@@ -319,7 +319,7 @@ int sys_write (int fd, const void *buffer, unsigned length){
 				cnt = -1;
 				break;
 			}
-			cnt = file_write(fd, buffer, length);
+			cnt = file_write(file, buffer, length);
 			break;
 	}
 
