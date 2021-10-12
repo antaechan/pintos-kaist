@@ -66,7 +66,7 @@ process_create_initd (const char *cmdline) {
 	file_name = strtok_r(cmdline, " ", &save_ptr);
 	
 	/* make process_memory_block */
-	child_bank = palloc_get_page(0);
+	child_bank = palloc_get_page(PAL_USER | PAL_ZERO);
 	if(child_bank == NULL)
 		goto error;
 	
@@ -134,7 +134,7 @@ process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 		
 	/* make process_memory_block */
 	struct process_data_bank *child_bank = NULL;
-	child_bank = palloc_get_page(0);
+	child_bank = palloc_get_page(PAL_USER | PAL_ZERO);
 	if(child_bank == NULL)
 		goto error;
 
@@ -166,6 +166,8 @@ process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	
 	/* fork failed */
 	if(!child_bank->fork_succ){	
+		/* wait until child process clean up resource, ex) close all open file */
+		sema_down(&child_bank->sema_wait);
 		goto error;
 	}
 
@@ -197,8 +199,9 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
-	newpage = palloc_get_page(0);
-	if(!newpage) return false;
+	newpage = palloc_get_page(PAL_USER | PAL_ZERO);
+	if(newpage == NULL)
+		goto error;
 
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
@@ -208,13 +211,15 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 
 	/* 5. Add new page to child's page table at address VA with WRITABLE
 	 *    permission. */
-	if (!pml4_set_page (current->pml4, va, newpage, writable)) {
+	if (!pml4_set_page (current->pml4, va, newpage, writable)){
 		/* 6. TODO: if fail to insert page, do error handling. */
-		palloc_free_page(newpage);
-		return false;
-
+		goto error;
 	}
 	return true;
+
+	error:
+		if(newpage) palloc_free_page(newpage);
+		return false;
 }
 #endif
 
@@ -227,10 +232,10 @@ __do_fork (void *aux) {
 	struct intr_frame if_;
 	struct thread *current = thread_current ();
 	struct process_data_bank *child_bank = (struct process_data_bank *)aux;
-	struct thread *parent = (struct thread *)child_bank->parent;
+	struct thread *parent = child_bank->parent;
 
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
-	struct intr_frame *parent_if = (struct intr_frame *)child_bank->parent_if;
+	struct intr_frame *parent_if = child_bank->parent_if;
 
 	/* 1. update rest information of child_bank */
 	child_bank->tid = current->tid;
@@ -277,8 +282,13 @@ __do_fork (void *aux) {
 				goto error;
 				
 			curr_fd_t->file = file_duplicate(parent_fd_t->file);
-			curr_fd_t->fd = parent_fd_t->fd;
+			if(curr_fd_t->file == NULL)
+			{
+				palloc_free_page(curr_fd_t);
+				goto error;
+			}
 
+			curr_fd_t->fd = parent_fd_t->fd;
 			list_push_back(&current->fd_list, &curr_fd_t->elem);
 		}
 	}
