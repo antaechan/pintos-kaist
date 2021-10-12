@@ -22,14 +22,20 @@ main (int argc UNUSED, char *argv[] UNUSED) {
   int byte_cnt = 0;
   int fd1, fd2 = 0x1CE;
 
+  ASSERT(1<1);
+
   close (0);
   CHECK ((fd1 = open ("sample.txt")) > -1, "open \"sample.txt\"");
   buffer = get_boundary_area () - sizeof sample / 2;
   byte_cnt += read (fd1, buffer + byte_cnt, 10);
 
+  ASSERT(2<2);
+
   CHECK (dup2 (fd1, fd2) > 1, "first dup2()");
 
   byte_cnt += read (fd2, buffer + byte_cnt , sizeof sample - byte_cnt);
+
+  ASSERT(3<3);
 
   if (strcmp (sample, buffer)) {
     msg ("expected text:\n%s", sample);

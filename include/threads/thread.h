@@ -140,6 +140,8 @@ struct fd_t{
 	int fd;
 	
 	struct list_elem elem;
+
+	int dup_cnt;
 };
 
 /* If false (default), use round-robin scheduler.

@@ -359,17 +359,26 @@ unsigned sys_tell (int fd){
 void sys_close (int fd){
 	
 	struct file *file;
+	struct fd_t *fd_t;
 	lock_acquire(&filesys_lock);
 	
+	fd_t = convert_fd2fd_t(fd, thread_current());
 	file = convert_fd2file(fd, thread_current());
 	if (file == NULL)
 	{
 		lock_release(&filesys_lock);
 		return;
 	}
-		
-	file_close(file);
+
+	if(fd_t->dup_cnt > 0){
+		fd_t->dup_cnt--;
+	}
+	else{
+		file_close(file);
+	}	
+	//file_close(file);
 	// delete file to list
+	//ASSERT(file == 0);
 	delete_file2list(fd, thread_current());
 	lock_release(&filesys_lock);
 }
@@ -434,7 +443,7 @@ void delete_file2list(int fd, struct thread *thread){
 		if(fd_t->fd == fd)
 		{
 			list_remove(e);
-			palloc_free_page(fd_t);
+			//palloc_free_page(fd_t);
 			break;
 		}
 	}
@@ -458,31 +467,32 @@ bool is_same_file(int fd1, int fd2){
 /* Duplicate the file descriptor */
 int sys_dup2(int oldfd, int newfd){
 	struct thread *t = thread_current();
-	struct file *old_file;
+	struct fd_t *old_fd_t;
 	struct fd_t *new_fd_t;
 	struct fd_t *fd_t;
 
 	/* check oldfd */
-	if((oldfd <= 2) || (oldfd >= t->next_fd)) return -1;
+	if((oldfd < 0) || (oldfd >= t->next_fd)) return -1;
 
-	old_file = convert_fd2file(oldfd, thread_current());
-	if(old_file == NULL) return -1;
+	old_fd_t = convert_fd2fd_t(oldfd, thread_current());
+	if(old_fd_t == NULL) return -1;
 
 	/* if oldfd and newfd have same value, then return newfd */
-	if((oldfd == newfd) && is_same_file(oldfd, newfd)) return newfd;
+	if(oldfd == newfd) return newfd;
 
 	/* if newfd is opened, then close it */
 	new_fd_t = convert_fd2fd_t(newfd, thread_current());
 	if(new_fd_t != NULL) sys_close(newfd);
 
-	/* if newfd is bigger than t->next_fd, then change it to newfd */
-	if(newfd >= t->next_fd) t->next_fd = newfd;
+	/* if newfd is bigger than t->next_fd, then change next_fd to newfd+1 */
+	if(newfd >= t->next_fd) t->next_fd = newfd+1;
 	else delete_file2list(newfd, thread_current());
 
 	/* duplicate it */
-	fd_t = (struct fd_t*)malloc(sizeof(struct fd_t*));
+	fd_t = (struct fd_t*) palloc_get_page(0);
 	fd_t->fd = newfd;
-	fd_t->file = file_duplicate(old_file);
+	fd_t->file = old_fd_t->file;
+	fd_t->dup_cnt = ++old_fd_t->dup_cnt;
 	list_push_back(&t->fd_list, &fd_t->elem);
 
 	return newfd;
