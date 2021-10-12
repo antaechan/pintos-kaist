@@ -15,6 +15,7 @@
 
 #ifdef USERPROG
 #include "userprog/process.h"
+#include "userprog/syscall.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -211,6 +212,12 @@ thread_create (const char *name, int priority,
 
 	/* Initialize thread. */
 	init_thread (t, name, priority);
+
+#ifdef USERPROG
+	if(!stdio_init(t))
+		return TID_ERROR;
+#endif
+
 	tid = t->tid = allocate_tid ();
 
 	/* Call the kernel_thread if it scheduled.
@@ -481,6 +488,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	list_init(&t->donor_list);     /* implement Priority Donation */
 	t->original_priority = priority;
 	t->wait_for_what_lock = NULL;
+	t->magic = THREAD_MAGIC;
 
 #ifdef USERPROG
 	                 
@@ -491,10 +499,12 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->next_fd = 3;
 	t->running_file = NULL;
 
+	list_init(&t->stdin_list);
+	list_init(&t->stdout_list);
+
 #endif
-
-
-	t->magic = THREAD_MAGIC;
+	
+		
 
 }
 

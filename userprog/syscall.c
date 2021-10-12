@@ -20,7 +20,7 @@ void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 
 static void check_user_memory(void *uaddr);
-
+static bool check_fd(int fd);
 
 /* System call.
  *
@@ -229,7 +229,6 @@ int sys_open (const char *file)
 		return -1;
 	}
 	fd = insert_file2list(open_file, thread_current());
-	// file_deny_write....?
 	lock_release(&filesys_lock);
 
 	return fd;
@@ -239,6 +238,8 @@ int sys_open (const char *file)
 int sys_filesize (int fd){
 	struct file *file;
 	int length;
+
+	if(!check_fd(fd)) return -1;
 
 	lock_acquire(&filesys_lock);
 	file = convert_fd2file(fd, thread_current());
@@ -256,79 +257,112 @@ int sys_filesize (int fd){
 int sys_read (int fd, void *buffer, unsigned length){
 	
 	struct file *file;
+	struct thread *t = thread_current();
 	char *ptr = (char *)buffer;
 	int cnt;
 
 	check_user_memory(ptr);
 	check_user_memory(ptr + length - 1);
 
+	if(!check_fd(fd)) return -1;
+
 	lock_acquire(&filesys_lock);
 
-	switch(fd)
-	{
-		case STDIN_FILENO:
-			for (cnt = 0; cnt < length; cnt++)
-			{
-				*(ptr + cnt) = input_getc();
-				if( *(ptr + cnt) == '\n')
-				{
-					*(ptr + cnt) = NULL;
-					break;
-				}
-			}
-			check_user_memory(ptr + length);
-			*(ptr + cnt) = NULL;
-			break;
+	struct list_elem *e;
+	struct fd *fd_num;
 
-		default:
-			file = convert_fd2file(fd, thread_current());
-			if(file == NULL){
-				cnt = -1;
-				break;
-			}
-				
-			cnt = file_read(file, buffer, length);
-			break;
+	if(!list_empty(&t->stdin_list))
+	{
+		for(e = list_begin(&t->stdin_list); e != list_end(&t->stdin_list); e = list_next(e))
+		{
+			fd_num = list_entry(e, struct fd, elem);
+			if(fd_num->fd == fd)
+				goto stdin_read;
+		}
 	}
 
-	lock_release(&filesys_lock);
-	return cnt;
+	file = convert_fd2file(fd, t);
+	if(file == NULL){
+		cnt = -1;
+		goto done;
+	}
+	
+	/* read file data and write at buffer */
+	cnt = file_read(file, buffer, length);
+
+	done:
+		lock_release(&filesys_lock);
+		return cnt;
+
+	stdin_read:
+		/* read from stdin file */
+		for (cnt = 0; cnt < length; cnt++)
+		{
+			*(ptr + cnt) = input_getc();
+			if( *(ptr + cnt) == '\n')
+			{
+				*(ptr + cnt) = NULL;
+				break;
+			}
+		}
+		check_user_memory(ptr + length);
+		*(ptr + cnt) = NULL;
+		goto done;
+
 }
 
 /* Write to a file. */
 int sys_write (int fd, const void *buffer, unsigned length){
 	
 	struct file *file;
-	int cnt = 0;
+	struct thread *t = thread_current();
+	int cnt;
 
 	check_user_memory(buffer);
 	check_user_memory(buffer + length - 1);
 
+	if(!check_fd(fd)) return -1;
+
 	lock_acquire(&filesys_lock);
-	switch(fd){
-		case STDOUT_FILENO:
-			putbuf((const char *)buffer, length);
-			cnt = length;
-			break;
-		
-		default:
-			file = convert_fd2file(fd, thread_current());
-			if(file == NULL){
-				cnt = -1;
-				break;
-			}
-			cnt = file_write(file, buffer, length);
-			break;
+
+	struct list_elem *e;
+	struct fd *fd_num;
+
+	if(!list_empty(&t->stdout_list))
+	{
+		for(e = list_begin(&t->stdout_list); e != list_end(&t->stdout_list); e = list_next(e))
+		{
+			fd_num = list_entry(e, struct fd, elem);
+			if(fd_num->fd == fd)
+				goto stdout_write;
+		}
 	}
 
-	lock_release(&filesys_lock);
-	return cnt;
+	file = convert_fd2file(fd, t);
+	if(file == NULL){
+		cnt = -1;
+		goto done;
+	}
+
+	/* write data in buffer to file */
+	cnt = file_write(file, buffer, length);
+	
+	done:
+		lock_release(&filesys_lock);
+		return cnt;
+
+	stdout_write:
+		/* write at STDOUT file */
+		putbuf((const char *)buffer, length);
+		cnt = length;
+		goto done;
 }
 
 /* Change position in a file. */
 void sys_seek (int fd, unsigned position){
 
 	struct file* file;
+	if(!check_fd(fd)) return;
 
 	lock_acquire(&filesys_lock);
 	file = convert_fd2file(fd, thread_current());
@@ -341,7 +375,9 @@ void sys_seek (int fd, unsigned position){
 unsigned sys_tell (int fd){
 	unsigned position;
 	struct file* file;
-	
+
+	if(!check_fd(fd)) return -1;
+
 	lock_acquire(&filesys_lock);
 	file = convert_fd2file(fd, thread_current());
 	if(file != NULL){
@@ -358,36 +394,93 @@ unsigned sys_tell (int fd){
 /* Close a file. */
 void sys_close (int fd){
 	
-	struct file *file;
+	struct fd_t *fd_t;
+	struct fd *fd_num;
+	struct list_elem *e;
+	struct thread *t = thread_current();
+
+	if(!check_fd(fd))	return;
+
 	lock_acquire(&filesys_lock);
-	
-	file = convert_fd2file(fd, thread_current());
-	if (file == NULL)
+
+	if(!list_empty(&t->stdin_list))
 	{
+		for(e = list_begin(&t->stdin_list); e != list_end(&t->stdin_list); e = list_next(e))
+		{
+			fd_num = list_entry(e, struct fd, elem);
+			if(fd_num->fd == fd)
+			{
+				list_remove(e);
+				palloc_free_page(fd_num);
+				goto done;
+			}
+		}
+	}
+
+	if(!list_empty(&t->stdout_list))
+	{
+		for(e = list_begin(&t->stdout_list); e != list_end(&t->stdout_list); e = list_next(e))
+		{
+			fd_num = list_entry(e, struct fd, elem);
+			if(fd_num->fd == fd)
+			{
+				list_remove(e);
+				palloc_free_page(fd_num);
+				goto done;
+			}
+		}
+	}
+
+	fd_t = convert_fd2fd_t(fd, t);
+	fd_num = convert_fd2fd(fd, t);
+
+	if (fd_num == NULL)
+		goto done;
+
+	list_remove(&fd_num->elem);
+	palloc_free_page(fd_num);
+
+	/* should close file */
+	if(list_empty(&fd_t->dup2_list))
+	{
+		file_close(fd_t->file);
+		list_remove(&fd_t->elem);
+		palloc_free_page(fd_t);
+	}
+
+	done:
 		lock_release(&filesys_lock);
 		return;
-	}
-		
-	file_close(file);
-	// delete file to list
-	delete_file2list(fd, thread_current());
-	lock_release(&filesys_lock);
 }
 
 /* return opened file which has file descriptor fd,
  if not exist, then return NULL */
 struct file *convert_fd2file(int fd, struct thread *thread){
 	struct thread *t = thread;
-	struct list_elem *e;
+	struct list_elem *e1;
+	struct list_elem *e2;
 	struct fd_t *fd_t;
+	struct fd *fd_num;
+	struct list *dup2_list;
 
-	if((fd <= 2) || (fd >= t->next_fd)) return NULL;
-
-	for(e = list_begin(&t->fd_list); e != list_end(&t->fd_list); e = list_next(e))
+	if(!list_empty(&t->fd_list))
 	{
-		fd_t = list_entry(e, struct fd_t, elem);
-		if(fd_t->fd == fd) return fd_t->file;
+		for(e1 = list_begin(&t->fd_list); e1 != list_end(&t->fd_list); e1 = list_next(e1))
+		{
+			fd_t = list_entry(e1, struct fd_t, elem);
+			dup2_list = &fd_t->dup2_list;
+
+			if(!list_empty(dup2_list))
+			{
+				for(e2 = list_begin(dup2_list); e2 != list_end(dup2_list); e2 = list_next(e2))
+				{
+					fd_num = list_entry(e2, struct fd, elem);
+					if(fd_num->fd == fd) return fd_t->file;
+				}
+			}
+		}
 	}
+
 	return NULL;
 }
 
@@ -395,15 +488,58 @@ struct file *convert_fd2file(int fd, struct thread *thread){
 /* convert fd to fd_t with fd_list*/
 struct fd_t *convert_fd2fd_t(int fd, struct thread *thread){
 	struct thread *t = thread;
-	struct list_elem *e;
+	struct list_elem *e1;
+	struct list_elem *e2;
 	struct fd_t *fd_t;
+	struct fd *fd_num;
+	struct list *dup2_list;
 
-	if((fd <= 2) || fd >= t->next_fd) return NULL;
-
-	for(e=list_begin(&t->fd_list); e!=list_end(&t->fd_list); e=list_next(e)){
-		fd_t = list_entry(e, struct fd_t, elem);
-		if(fd_t->fd == fd) return fd_t;
+	if(!list_empty(&t->fd_list))
+	{
+		for(e1 = list_begin(&t->fd_list); e1 != list_end(&t->fd_list); e1 = list_next(e1))
+		{
+			fd_t = list_entry(e1, struct fd_t, elem);
+			dup2_list = &fd_t->dup2_list;
+			
+			if(!list_empty(dup2_list))
+			{
+				for(e2 = list_begin(dup2_list); e2 != list_end(dup2_list); e2 = list_next(e2))
+				{
+					fd_num = list_entry(e2, struct fd, elem);
+					if(fd_num->fd == fd) return fd_t;
+				}
+			}
+		}
 	}
+	return NULL;
+}
+
+struct fd *convert_fd2fd(int fd, struct thread *thread){
+	struct thread *t = thread;
+	struct list_elem *e1;
+	struct list_elem *e2;
+	struct fd_t *fd_t;
+	struct fd *fd_num;
+	struct list *dup2_list;
+
+	if(!list_empty(&t->fd_list))
+	{
+		for(e1 = list_begin(&t->fd_list); e1 != list_end(&t->fd_list); e1 = list_next(e1))
+		{
+			fd_t = list_entry(e1, struct fd_t, elem);
+			dup2_list = &fd_t->dup2_list;
+			
+			if(!list_empty(dup2_list))
+			{
+				for(e2 = list_begin(dup2_list); e2 != list_end(dup2_list); e2 = list_next(e2))
+				{
+					fd_num = list_entry(e2, struct fd, elem);
+					if(fd_num->fd == fd) return fd_num;
+				}
+			}
+		}
+	}
+	return NULL;
 }
 
 /* insert file to fd_list and increase next_fd */
@@ -413,78 +549,134 @@ int insert_file2list(struct file *file, struct thread *thread){
 
 	struct fd_t *fd_t = (struct fd_t *)palloc_get_page(0);
 	if(fd_t == NULL)
-		return -1;
+		goto error;
+
+	list_init(&fd_t->dup2_list);
+
+	struct fd *fd_num = (struct fd *)palloc_get_page(0);
+	if(fd_num == NULL)
+		goto error;
 	
 	fd = t->next_fd++;
-	fd_t->fd = fd;
+
+	fd_num->fd = fd;
 	fd_t->file = file;
+
 	list_push_back(&t->fd_list, &fd_t->elem);
+	list_push_back(&fd_t->dup2_list, &fd_num->elem);
 	return fd;
+
+	error:
+		if(fd_t) palloc_free_page(fd_t);
+		if(fd_num) palloc_free_page(fd_num);
+		return -1;
 }
-
-/* delete file to fd_list and decrease next_fd */
-void delete_file2list(int fd, struct thread *thread){
-	struct thread *t = thread;
-	struct list_elem *e;
-	struct fd_t *fd_t;
-
-	for(e = list_begin(&t->fd_list); e != list_end(&t->fd_list); e = list_next(e))
-	{
-		fd_t = list_entry(e, struct fd_t, elem);
-		if(fd_t->fd == fd)
-		{
-			list_remove(e);
-			palloc_free_page(fd_t);
-			break;
-		}
-	}
-
-	return;
-}
-
-/* compare file f1(with fd1) with f2(with fd2), and return true if same, otherwise return false */
-bool is_same_file(int fd1, int fd2){
-	struct file *f1 = convert_fd2file(fd1, thread_current());
-	struct file *f2 = convert_fd2file(fd2, thread_current());
-	bool inode = (&f1->inode == &f2->inode);
-	bool pos = (f1->pos == f2->pos);
-	bool deny_write = (f1->deny_write == f2->deny_write);
-
-	return inode & pos & deny_write;
-}
-
 
 /* ----------------- Extra Credit -------------------------- */
 /* Duplicate the file descriptor */
 int sys_dup2(int oldfd, int newfd){
 	struct thread *t = thread_current();
-	struct file *old_file;
+	struct fd_t *old_fd_t;
 	struct fd_t *new_fd_t;
 	struct fd_t *fd_t;
+	struct fd *fd_num0;
+	struct list *push_list;
+
+	bool oldfd_exist = false;
+	bool newfd_exist = false;
 
 	/* check oldfd */
-	if((oldfd <= 2) || (oldfd >= t->next_fd)) return -1;
+	if(!check_fd(oldfd)) return -1;
 
-	old_file = convert_fd2file(oldfd, thread_current());
-	if(old_file == NULL) return -1;
+	struct list_elem *e;
+	struct fd *fd_num;
+
+	if(!list_empty(&t->stdin_list))
+	{
+		for(e = list_begin(&t->stdin_list); e != list_end(&t->stdin_list); e = list_next(e))
+		{
+			fd_num = list_entry(e, struct fd, elem);
+			if(fd_num->fd == oldfd)
+			{
+				oldfd_exist = true;
+				push_list = &t->stdin_list;
+				goto oldfd_valid;
+			}
+		}
+	}
+
+	if(!list_empty(&t->stdout_list))
+	{
+		for(e = list_begin(&t->stdout_list); e != list_end(&t->stdout_list); e = list_next(e))
+		{
+			fd_num = list_entry(e, struct fd, elem);
+			if(fd_num->fd == oldfd)
+			{
+				oldfd_exist = true;
+				push_list = &t->stdout_list;
+				goto oldfd_valid;
+			}
+		}
+	}
+
+	old_fd_t = convert_fd2fd_t(oldfd, thread_current());
+
+	if(old_fd_t != NULL)
+	{
+		push_list = &old_fd_t->dup2_list;
+		oldfd_exist = true;
+	}
+
+	oldfd_valid:
+		if(!oldfd_exist) return -1;
 
 	/* if oldfd and newfd have same value, then return newfd */
-	if((oldfd == newfd) && is_same_file(oldfd, newfd)) return newfd;
+	if(oldfd == newfd) return newfd;
 
 	/* if newfd is opened, then close it */
-	new_fd_t = convert_fd2fd_t(newfd, thread_current());
-	if(new_fd_t != NULL) sys_close(newfd);
+	if(!list_empty(&t->stdin_list))
+	{
+		for(e = list_begin(&t->stdin_list); e != list_end(&t->stdin_list); e = list_next(e))
+		{
+			fd_num = list_entry(e, struct fd, elem);
+			if(fd_num->fd == newfd)
+			{
+				newfd_exist = true;
+				goto newfd_valid;
+			}
+		}
+	}
 
-	/* if newfd is bigger than t->next_fd, then change it to newfd */
-	if(newfd >= t->next_fd) t->next_fd = newfd;
-	else delete_file2list(newfd, thread_current());
+	if(!list_empty(&t->stdout_list))
+	{
+		for(e = list_begin(&t->stdout_list); e != list_end(&t->stdout_list); e = list_next(e))
+		{
+			fd_num = list_entry(e, struct fd, elem);
+			if(fd_num->fd == newfd)
+			{
+				newfd_exist = true;
+				goto newfd_valid;
+			}
+		}
+	}
+
+	new_fd_t = convert_fd2fd_t(newfd, thread_current());
+	if(new_fd_t != NULL)
+		newfd_exist = true;
+		
+	newfd_valid:
+		if(newfd_exist)
+			sys_close(newfd);
 
 	/* duplicate it */
-	fd_t = (struct fd_t*)malloc(sizeof(struct fd_t*));
-	fd_t->fd = newfd;
-	fd_t->file = file_duplicate(old_file);
-	list_push_back(&t->fd_list, &fd_t->elem);
+	fd_num0 = palloc_get_page(0);
+	if(fd_num0 == NULL) return -1;
+	
+	fd_num0->fd = newfd;
+	list_push_back(push_list, &fd_num0->elem);
 
+	/* if newfd is bigger than t->next_fd, then change it to newfd */
+	if(newfd >= t->next_fd) t->next_fd = newfd + 1;
 	return newfd;
 }
 /* Projects 2 and later. ----------------------------------- */
@@ -512,4 +704,33 @@ static void check_user_memory(void *uaddr)
 		sys_exit(-1);
 	
 	return;
+}
+
+static bool check_fd(int fd){
+	struct thread *t = thread_current();
+	if((fd < 0) || (fd >= t->next_fd)) return false;
+	return true;
+}
+
+bool stdio_init(struct thread *t)
+{
+	struct fd *stdin = palloc_get_page(0);
+	if(stdin == NULL)
+		goto error;
+
+	stdin->fd = STDIN_FILENO;
+	list_push_back(&t->stdin_list, &stdin->elem);
+		
+	struct fd *stdout = palloc_get_page(0);
+	if(stdout == NULL)
+		goto error;
+
+	stdout->fd = STDOUT_FILENO;
+	list_push_back(&t->stdout_list, &stdout->elem);
+	return true;
+
+	error:
+		if(stdin) palloc_free_page(stdin);
+		if(stdout) palloc_free_page(stdout);
+		return false;
 }

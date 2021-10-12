@@ -6,11 +6,11 @@
 #include "threads/interrupt.h"
 #include "filesys/file.h"
 
-struct file *convert_fd2file(int fd, struct thread *thread);
 int insert_file2list(struct file *file, struct thread *thread);
-void delete_file2list(int fd, struct thread *thread);
+struct file *convert_fd2file(int fd, struct thread *thread);
 struct fd_t *convert_fd2fd_t(int fd, struct thread *thread);
-bool is_same_file(int fd1, int fd2);
+struct fd *convert_fd2fd(int fd, struct thread *thread);
+bool stdio_init(struct thread *t);
 
 void syscall_init (void);
 

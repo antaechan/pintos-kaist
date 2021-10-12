@@ -45,6 +45,7 @@ main (int argc UNUSED, char *argv[] UNUSED) {
   seek (fd1, 15);
   byte_cnt += (read (fd1, buffer + 15, 30) - 15);
 
+
   dup2 (dup2 (fd3, fd3), dup2 (fd1, fd2));
   seek (fd2, tell (fd1));
   

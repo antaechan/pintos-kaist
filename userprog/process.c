@@ -270,7 +270,36 @@ __do_fork (void *aux) {
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
 	struct list_elem *e;
+	struct list_elem *e1;
 	struct fd_t *parent_fd_t;
+
+	if(!list_empty(&parent->stdin_list))
+	{
+		for(e = list_front(&parent->stdin_list); e != list_end(&parent->stdin_list); e = list_next(e))
+		{
+			struct fd *parent_fd_num = list_entry(e, struct fd, elem);
+			struct fd *curr_fd_num = palloc_get_page(0);
+			if(curr_fd_num == NULL)
+				goto error;
+			
+			curr_fd_num->fd = parent_fd_num->fd;
+			list_push_back(&current->stdin_list, &curr_fd_num->elem);
+		}
+	}
+
+	if(!list_empty(&parent->stdout_list))
+	{
+		for(e = list_front(&parent->stdout_list); e != list_end(&parent->stdout_list); e = list_next(e))
+		{
+			struct fd *parent_fd_num = list_entry(e, struct fd, elem);
+			struct fd *curr_fd_num = palloc_get_page(0);
+			if(curr_fd_num == NULL)
+				goto error;
+			
+			curr_fd_num->fd = parent_fd_num->fd;
+			list_push_back(&current->stdout_list, &curr_fd_num->elem);
+		}
+	}
 
 	if(!list_empty(&parent->fd_list))
 	{
@@ -287,9 +316,24 @@ __do_fork (void *aux) {
 				palloc_free_page(curr_fd_t);
 				goto error;
 			}
-
-			curr_fd_t->fd = parent_fd_t->fd;
+			
+			list_init(&curr_fd_t->dup2_list);
 			list_push_back(&current->fd_list, &curr_fd_t->elem);
+
+			if(!list_empty(&parent_fd_t->dup2_list))
+			{
+				for(e1 = list_front(&parent_fd_t->dup2_list); e1 != list_end(&parent_fd_t->dup2_list);
+				e1 = list_next(e1))
+				{
+					struct fd *parent_fd_num = list_entry(e1, struct fd, elem);
+					struct fd *curr_fd_num = palloc_get_page(0);
+					if(curr_fd_num == NULL)
+						goto error;
+
+					curr_fd_num->fd = parent_fd_num->fd;
+					list_push_back(&curr_fd_t->dup2_list, &curr_fd_num->elem);
+				}
+			}
 		}
 	}
 	current->next_fd = parent->next_fd;
@@ -496,11 +540,34 @@ process_exit (void) {
 	
 	
 	/* 1. close all open file */
+	struct list *stdin_list = &curr->stdin_list;
+	struct list *stdout_list = &curr->stdout_list;
 	struct list *fd_list = &curr->fd_list;
+	
+	while(!list_empty(stdin_list))
+	{
+		struct list_elem *e = list_pop_front(stdin_list);
+		struct fd *fd_num = list_entry(e, struct fd, elem);
+		palloc_free_page(fd_num);
+	}
+
+	while(!list_empty(stdout_list))
+	{
+		struct list_elem *e = list_pop_front(stdout_list);
+		struct fd *fd_num = list_entry(e, struct fd, elem);
+		palloc_free_page(fd_num);
+	}
+
 	while(!list_empty(fd_list))
 	{
 		struct list_elem *e = list_pop_front(fd_list);
 		struct fd_t *fd_t = list_entry(e, struct fd_t, elem);
+		while(!list_empty(&fd_t->dup2_list))
+		{
+			struct list_elem *e1 = list_pop_front(&fd_t->dup2_list);
+			struct fd *fd_num = list_entry(e1, struct fd, elem);
+			palloc_free_page(fd_num);
+		}
 		file_close(fd_t->file);
 		palloc_free_page(fd_t);
 	}

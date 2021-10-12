@@ -123,6 +123,11 @@ struct thread {
 	struct process_data_bank *data_bank;	/* process important information store */
 	struct list child_list;
 
+	/* Implement dup2 part: Extended File Descirptor(Extra) -----------------------*/
+	struct list stdin_list;
+	struct list stdout_list;
+	/* Implement dup2 part: Extended File Descirptor(Extra) -----------------------*/
+
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
@@ -137,10 +142,15 @@ struct thread {
 /* fd of thread */
 struct fd_t{
 	struct file *file;
-	int fd;
-	
+	struct list dup2_list;
 	struct list_elem elem;
 };
+
+struct fd{
+	int fd;
+	struct list_elem elem;
+};
+
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
