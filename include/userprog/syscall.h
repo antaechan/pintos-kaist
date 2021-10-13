@@ -7,7 +7,6 @@
 #include "filesys/file.h"
 
 int insert_file2list(struct file *file, struct thread *thread);
-struct file *convert_fd2file(int fd, struct thread *thread);
 struct fd *search_fd_single_list(int fd, struct list *list);
 struct fd *search_fd_double_list(int fd, struct list *list);
 struct fd_t *search_fd_t_double_list(int fd, struct list *list);

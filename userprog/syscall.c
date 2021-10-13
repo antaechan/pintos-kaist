@@ -236,27 +236,29 @@ int sys_open (const char *file)
 
 /* Obtain a file's size. */
 int sys_filesize (int fd){
-	struct file *file;
+
+	struct thread *t = thread_current();
+	struct fd_t *fd_t;
 	int length;
 
 	if(!check_fd(fd)) return -1;
 
 	lock_acquire(&filesys_lock);
-	file = convert_fd2file(fd, thread_current());
-	if(file == NULL){
+	fd_t = search_fd_t_double_list(fd, &t->fd_list);
+	if(fd_t == NULL){
 		lock_release(&filesys_lock);
 		return -1;
 	}
-	length = file_length(file);
+
+	length = file_length(fd_t->file);
 	lock_release(&filesys_lock);
-	
 	return length;
 }
 
 /* Read from a file. */
 int sys_read (int fd, void *buffer, unsigned length){
 	
-	struct file *file;
+	struct fd_t *fd_t;
 	struct thread *t = thread_current();
 	char *ptr = (char *)buffer;
 	int cnt;
@@ -274,14 +276,14 @@ int sys_read (int fd, void *buffer, unsigned length){
 	if(fd_num = search_fd_single_list(fd, &t->stdin_list))
 		goto stdin_read;
 
-	file = convert_fd2file(fd, t);
-	if(file == NULL){
+	fd_t = search_fd_t_double_list(fd, &t->fd_list);
+	if(fd_t == NULL){
 		cnt = -1;
 		goto done;
 	}
 	
 	/* read file data and write at buffer */
-	cnt = file_read(file, buffer, length);
+	cnt = file_read(fd_t->file, buffer, length);
 
 	done:
 		lock_release(&filesys_lock);
@@ -307,7 +309,7 @@ int sys_read (int fd, void *buffer, unsigned length){
 /* Write to a file. */
 int sys_write (int fd, const void *buffer, unsigned length){
 	
-	struct file *file;
+	struct fd_t *fd_t;
 	struct thread *t = thread_current();
 	int cnt;
 
@@ -324,14 +326,14 @@ int sys_write (int fd, const void *buffer, unsigned length){
 	if(fd_num = search_fd_single_list(fd, &t->stdout_list))
 		goto stdout_write;
 
-	file = convert_fd2file(fd, t);
-	if(file == NULL){
+	fd_t = search_fd_t_double_list(fd, &t->fd_list);
+	if(fd_t == NULL){
 		cnt = -1;
 		goto done;
 	}
 
 	/* write data in buffer to file */
-	cnt = file_write(file, buffer, length);
+	cnt = file_write(fd_t->file, buffer, length);
 	
 	done:
 		lock_release(&filesys_lock);
@@ -347,27 +349,32 @@ int sys_write (int fd, const void *buffer, unsigned length){
 /* Change position in a file. */
 void sys_seek (int fd, unsigned position){
 
-	struct file* file;
+	struct thread *t = thread_current();
+	struct fd_t* fd_t;
 	if(!check_fd(fd)) return;
 
 	lock_acquire(&filesys_lock);
-	file = convert_fd2file(fd, thread_current());
-	if(file != NULL) file_seek(file, position);
+
+	fd_t = search_fd_t_double_list(fd, &t->fd_list);
+	if(fd_t != NULL) file_seek(fd_t->file, position);
 	lock_release(&filesys_lock);
 
 }
 
 /* Report current position in a file. */
 unsigned sys_tell (int fd){
+
+	struct thread *t = thread_current();
 	unsigned position;
-	struct file* file;
+	struct fd_t *fd_t;
 
 	if(!check_fd(fd)) return -1;
 
 	lock_acquire(&filesys_lock);
-	file = convert_fd2file(fd, thread_current());
-	if(file != NULL){
-		position = file_tell(file);
+
+	fd_t = search_fd_t_double_list(fd, &t->fd_list);
+	if(fd_t != NULL){
+		position = file_tell(fd_t->file);
 	}
 	else{
 		position = -1;
@@ -423,37 +430,6 @@ void sys_close (int fd){
 		return;
 }
 
-/* return opened file which has file descriptor fd,
- if not exist, then return NULL */
-struct file *convert_fd2file(int fd, struct thread *thread){
-	struct thread *t = thread;
-	struct list_elem *e1;
-	struct list_elem *e2;
-	struct fd_t *fd_t;
-	struct fd *fd_num;
-	struct list *dup2_list;
-
-	if(!list_empty(&t->fd_list))
-	{
-		for(e1 = list_begin(&t->fd_list); e1 != list_end(&t->fd_list); e1 = list_next(e1))
-		{
-			fd_t = list_entry(e1, struct fd_t, elem);
-			dup2_list = &fd_t->dup2_list;
-
-			if(!list_empty(dup2_list))
-			{
-				for(e2 = list_begin(dup2_list); e2 != list_end(dup2_list); e2 = list_next(e2))
-				{
-					fd_num = list_entry(e2, struct fd, elem);
-					if(fd_num->fd == fd) return fd_t->file;
-				}
-			}
-		}
-	}
-
-	return NULL;
-}
-
 struct fd *search_fd_single_list(int fd, struct list *list){
 	struct list_elem *e;
 	struct fd *fd_num;
@@ -471,12 +447,16 @@ struct fd *search_fd_single_list(int fd, struct list *list){
 struct fd *search_fd_double_list(int fd, struct list *list){
 	struct list_elem *e;
 	struct fd_t *fd_t;
+	struct fd *fd_num;
 
-	if(list_empty(list)) return NULL;
+	if(list_empty(list))
+		return NULL;
+	
 	for(e = list_begin(list); e != list_end(list); e = list_next(e))
 	{
 		fd_t = list_entry(e, struct fd_t, elem);
-		return search_fd_single_list(fd, &fd_t->dup2_list);
+		fd_num = search_fd_single_list(fd, &fd_t->dup2_list);
+		if(fd_num)	return fd_num;
 	}
 	return NULL;
 }
@@ -484,13 +464,16 @@ struct fd *search_fd_double_list(int fd, struct list *list){
 struct fd_t *search_fd_t_double_list(int fd, struct list *list){
 	struct list_elem *e;
 	struct fd_t *fd_t;
+	struct fd *fd_num;
 
-	if(list_empty(list)) return NULL;
+	if(list_empty(list))
+		return NULL;
+	
 	for(e = list_begin(list); e != list_end(list); e = list_next(e))
 	{
 		fd_t = list_entry(e, struct fd_t, elem);
-		if(search_fd_single_list(fd, &fd_t->dup2_list))
-			return fd_t;
+		fd_num = search_fd_single_list(fd, &fd_t->dup2_list);
+		if(fd_num)	return fd_t;
 	}
 	return NULL;
 }
@@ -556,9 +539,7 @@ int sys_dup2(int oldfd, int newfd){
 		goto oldfd_valid;
 	}
 
-	old_fd_t = search_fd_t_double_list(oldfd, &t->fd_list);
-	if(old_fd_t != NULL)
-	{
+	if(old_fd_t = search_fd_t_double_list(oldfd, &t->fd_list)){
 		push_list = &old_fd_t->dup2_list;
 		oldfd_exist = true;
 	}
@@ -575,13 +556,12 @@ int sys_dup2(int oldfd, int newfd){
 		goto newfd_valid;
 	}
 
-	if (fd_num = search_fd_single_list(newfd, &t->stdin_list)){
+	if (fd_num = search_fd_single_list(newfd, &t->stdout_list)){
 		newfd_exist = true;
 		goto newfd_valid;
 	}
 
-	new_fd_t = search_fd_t_double_list(oldfd, &t->fd_list);
-	if(new_fd_t != NULL)
+	if(new_fd_t = search_fd_t_double_list(oldfd, &t->fd_list))
 		newfd_exist = true;
 		
 	newfd_valid:
