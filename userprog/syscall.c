@@ -695,7 +695,7 @@ static void check_user_memory(void *uaddr)
 	else if(is_kernel_vaddr(uaddr))
 		is_valid = false;
 
-	//a virtual address not mapped to physical address
+	/* a virtual address not mapped to physical address */
 	else if(pml4e_walk(thread_current()->pml4, uaddr, false) == NULL)
 		is_valid = false;
 	
