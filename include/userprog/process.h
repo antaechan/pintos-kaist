@@ -8,13 +8,15 @@ struct process_data_bank {
     
     tid_t tid;
     int exit_stat;
+
+    /* information to use in process_create_initd */
     char *cmdline;
 
     /* information to use in fork */
 	struct thread *parent;
 	struct intr_frame *parent_if;
 
-    /* porcess state information mark */
+    /* process state information mark */
 	bool init_mark;
 	bool fork_succ;
 	bool exit_mark;
@@ -28,7 +30,6 @@ struct process_data_bank {
 
     struct list_elem elem;
 };
-
 
 tid_t process_create_initd (const char *file_name);
 tid_t process_fork (const char *name, struct intr_frame *if_);
