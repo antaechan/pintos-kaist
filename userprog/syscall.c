@@ -271,15 +271,8 @@ int sys_read (int fd, void *buffer, unsigned length){
 	struct list_elem *e;
 	struct fd *fd_num;
 
-	if(!list_empty(&t->stdin_list))
-	{
-		for(e = list_begin(&t->stdin_list); e != list_end(&t->stdin_list); e = list_next(e))
-		{
-			fd_num = list_entry(e, struct fd, elem);
-			if(fd_num->fd == fd)
-				goto stdin_read;
-		}
-	}
+	if(fd_num = search_fd_single_list(fd, &t->stdin_list))
+		goto stdin_read;
 
 	file = convert_fd2file(fd, t);
 	if(file == NULL){
@@ -328,15 +321,8 @@ int sys_write (int fd, const void *buffer, unsigned length){
 	struct list_elem *e;
 	struct fd *fd_num;
 
-	if(!list_empty(&t->stdout_list))
-	{
-		for(e = list_begin(&t->stdout_list); e != list_end(&t->stdout_list); e = list_next(e))
-		{
-			fd_num = list_entry(e, struct fd, elem);
-			if(fd_num->fd == fd)
-				goto stdout_write;
-		}
-	}
+	if(fd_num = search_fd_single_list(fd, &t->stdout_list))
+		goto stdout_write;
 
 	file = convert_fd2file(fd, t);
 	if(file == NULL){
@@ -403,36 +389,20 @@ void sys_close (int fd){
 
 	lock_acquire(&filesys_lock);
 
-	if(!list_empty(&t->stdin_list))
-	{
-		for(e = list_begin(&t->stdin_list); e != list_end(&t->stdin_list); e = list_next(e))
-		{
-			fd_num = list_entry(e, struct fd, elem);
-			if(fd_num->fd == fd)
-			{
-				list_remove(e);
-				palloc_free_page(fd_num);
-				goto done;
-			}
-		}
+	if(fd_num = search_fd_single_list(fd, &t->stdin_list)){
+		list_remove(&fd_num->elem);
+		palloc_free_page(fd_num);
+		goto done;
 	}
 
-	if(!list_empty(&t->stdout_list))
-	{
-		for(e = list_begin(&t->stdout_list); e != list_end(&t->stdout_list); e = list_next(e))
-		{
-			fd_num = list_entry(e, struct fd, elem);
-			if(fd_num->fd == fd)
-			{
-				list_remove(e);
-				palloc_free_page(fd_num);
-				goto done;
-			}
-		}
+	if(fd_num = search_fd_single_list(fd, &t->stdout_list)){
+		list_remove(&fd_num->elem);
+		palloc_free_page(fd_num);
+		goto done;
 	}
 
-	fd_t = convert_fd2fd_t(fd, t);
-	fd_num = convert_fd2fd(fd, t);
+	fd_t = search_fd_t_double_list(fd, &t->fd_list);
+	fd_num = search_fd_double_list(fd, &t->fd_list);
 
 	if (fd_num == NULL)
 		goto done;
@@ -484,60 +454,43 @@ struct file *convert_fd2file(int fd, struct thread *thread){
 	return NULL;
 }
 
-
-/* convert fd to fd_t with fd_list*/
-struct fd_t *convert_fd2fd_t(int fd, struct thread *thread){
-	struct thread *t = thread;
-	struct list_elem *e1;
-	struct list_elem *e2;
-	struct fd_t *fd_t;
+struct fd *search_fd_single_list(int fd, struct list *list){
+	struct list_elem *e;
 	struct fd *fd_num;
-	struct list *dup2_list;
 
-	if(!list_empty(&t->fd_list))
+	if(list_empty(list)) return NULL;
+	for(e = list_begin(list); e != list_end(list); e = list_next(e))
 	{
-		for(e1 = list_begin(&t->fd_list); e1 != list_end(&t->fd_list); e1 = list_next(e1))
-		{
-			fd_t = list_entry(e1, struct fd_t, elem);
-			dup2_list = &fd_t->dup2_list;
-			
-			if(!list_empty(dup2_list))
-			{
-				for(e2 = list_begin(dup2_list); e2 != list_end(dup2_list); e2 = list_next(e2))
-				{
-					fd_num = list_entry(e2, struct fd, elem);
-					if(fd_num->fd == fd) return fd_t;
-				}
-			}
-		}
+		fd_num = list_entry(e, struct fd, elem);
+		if(fd_num->fd == fd)
+			return fd_num;
 	}
 	return NULL;
 }
 
-struct fd *convert_fd2fd(int fd, struct thread *thread){
-	struct thread *t = thread;
-	struct list_elem *e1;
-	struct list_elem *e2;
+struct fd *search_fd_double_list(int fd, struct list *list){
+	struct list_elem *e;
 	struct fd_t *fd_t;
-	struct fd *fd_num;
-	struct list *dup2_list;
 
-	if(!list_empty(&t->fd_list))
+	if(list_empty(list)) return NULL;
+	for(e = list_begin(list); e != list_end(list); e = list_next(e))
 	{
-		for(e1 = list_begin(&t->fd_list); e1 != list_end(&t->fd_list); e1 = list_next(e1))
-		{
-			fd_t = list_entry(e1, struct fd_t, elem);
-			dup2_list = &fd_t->dup2_list;
-			
-			if(!list_empty(dup2_list))
-			{
-				for(e2 = list_begin(dup2_list); e2 != list_end(dup2_list); e2 = list_next(e2))
-				{
-					fd_num = list_entry(e2, struct fd, elem);
-					if(fd_num->fd == fd) return fd_num;
-				}
-			}
-		}
+		fd_t = list_entry(e, struct fd_t, elem);
+		return search_fd_single_list(fd, &fd_t->dup2_list);
+	}
+	return NULL;
+}
+
+struct fd_t *search_fd_t_double_list(int fd, struct list *list){
+	struct list_elem *e;
+	struct fd_t *fd_t;
+
+	if(list_empty(list)) return NULL;
+	for(e = list_begin(list); e != list_end(list); e = list_next(e))
+	{
+		fd_t = list_entry(e, struct fd_t, elem);
+		if(search_fd_single_list(fd, &fd_t->dup2_list))
+			return fd_t;
 	}
 	return NULL;
 }
@@ -591,36 +544,19 @@ int sys_dup2(int oldfd, int newfd){
 	struct list_elem *e;
 	struct fd *fd_num;
 
-	if(!list_empty(&t->stdin_list))
-	{
-		for(e = list_begin(&t->stdin_list); e != list_end(&t->stdin_list); e = list_next(e))
-		{
-			fd_num = list_entry(e, struct fd, elem);
-			if(fd_num->fd == oldfd)
-			{
-				oldfd_exist = true;
-				push_list = &t->stdin_list;
-				goto oldfd_valid;
-			}
-		}
+	if(fd_num = search_fd_single_list(oldfd, &t->stdin_list)){
+		oldfd_exist = true;
+		push_list = &t->stdin_list;
+		goto oldfd_valid;
 	}
 
-	if(!list_empty(&t->stdout_list))
-	{
-		for(e = list_begin(&t->stdout_list); e != list_end(&t->stdout_list); e = list_next(e))
-		{
-			fd_num = list_entry(e, struct fd, elem);
-			if(fd_num->fd == oldfd)
-			{
-				oldfd_exist = true;
-				push_list = &t->stdout_list;
-				goto oldfd_valid;
-			}
-		}
+	if(fd_num = search_fd_single_list(oldfd, &t->stdout_list)){
+		oldfd_exist = true;
+		push_list = &t->stdout_list;
+		goto oldfd_valid;
 	}
 
-	old_fd_t = convert_fd2fd_t(oldfd, thread_current());
-
+	old_fd_t = search_fd_t_double_list(oldfd, &t->fd_list);
 	if(old_fd_t != NULL)
 	{
 		push_list = &old_fd_t->dup2_list;
@@ -634,33 +570,17 @@ int sys_dup2(int oldfd, int newfd){
 	if(oldfd == newfd) return newfd;
 
 	/* if newfd is opened, then close it */
-	if(!list_empty(&t->stdin_list))
-	{
-		for(e = list_begin(&t->stdin_list); e != list_end(&t->stdin_list); e = list_next(e))
-		{
-			fd_num = list_entry(e, struct fd, elem);
-			if(fd_num->fd == newfd)
-			{
-				newfd_exist = true;
-				goto newfd_valid;
-			}
-		}
+	if (fd_num = search_fd_single_list(newfd, &t->stdin_list)){
+		newfd_exist = true;
+		goto newfd_valid;
 	}
 
-	if(!list_empty(&t->stdout_list))
-	{
-		for(e = list_begin(&t->stdout_list); e != list_end(&t->stdout_list); e = list_next(e))
-		{
-			fd_num = list_entry(e, struct fd, elem);
-			if(fd_num->fd == newfd)
-			{
-				newfd_exist = true;
-				goto newfd_valid;
-			}
-		}
+	if (fd_num = search_fd_single_list(newfd, &t->stdin_list)){
+		newfd_exist = true;
+		goto newfd_valid;
 	}
 
-	new_fd_t = convert_fd2fd_t(newfd, thread_current());
+	new_fd_t = search_fd_t_double_list(oldfd, &t->fd_list);
 	if(new_fd_t != NULL)
 		newfd_exist = true;
 		
