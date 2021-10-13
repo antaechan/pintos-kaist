@@ -37,10 +37,34 @@ static void __do_fork (void *);
 static void
 construct_stack(struct intr_frame *if_, int argc, char ** argv);
 
-/* General process initializer for initd and other process. */
-static void
-process_init (void) {
-	struct thread *current = thread_current ();
+/* General process_data_bank initializer for initd and other process. */
+static bool
+process_data_bank_init (struct process_data_bank *bank) {
+
+	if(bank == NULL)
+		return false;
+	
+	/* initialization */
+	bank->tid = 0;	/* don't know yet, set right value after thread_create  */
+    bank->exit_stat = -1;
+
+	bank->init_mark = true;
+	bank->fork_succ = false;
+	bank->exit_mark = false;
+	bank->wait_mark = false;
+    bank->orphan = false;
+
+    sema_init(&bank->sema_init, 0);
+    sema_init(&bank->sema_fork, 0);
+    sema_init(&bank->sema_wait, 0);
+
+	/* auxiliary data, used when process_create_initd */
+	bank->cmdline = NULL;
+
+	/* auxiliary data, used when process_fork */
+	bank->parent = NULL;
+	bank->parent_if = NULL;
+	return true;
 }
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
@@ -71,19 +95,10 @@ process_create_initd (const char *cmdline) {
 		goto error;
 	
 	/* initialization */
-	child_bank->tid = 0;	/* don't know yet, set right value after thread_create  */
-    child_bank->exit_stat = -1;
+	process_data_bank_init(child_bank);
+
+	/* update auxiliary data  */
 	child_bank->cmdline = cmdline_copy;
-
-	child_bank->init_mark = true;
-	child_bank->fork_succ = false;
-	child_bank->exit_mark = false;
-	child_bank->wait_mark = false;
-    child_bank->orphan = false;
-
-    sema_init(&child_bank->sema_init, 0);
-    sema_init(&child_bank->sema_fork, 0);
-    sema_init(&child_bank->sema_wait, 0);
 
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (file_name, PRI_DEFAULT, initd, child_bank);
@@ -139,22 +154,11 @@ process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 		goto error;
 
 	/* initialization */
-	child_bank->tid = 0;	/* don't know yet, set right value after thread_create  */
-    child_bank->exit_stat = -1;
-	child_bank->cmdline = NULL;
+	process_data_bank_init(child_bank);
 
+	/* update auxiliary data  */
 	child_bank->parent = parent;
 	child_bank->parent_if = if_;
-
-	child_bank->init_mark = false;
-	child_bank->fork_succ = false;
-	child_bank->exit_mark = false;
-	child_bank->wait_mark = false;
-    child_bank->orphan = false;
-
-    sema_init(&child_bank->sema_init, 0);
-    sema_init(&child_bank->sema_fork, 0);
-    sema_init(&child_bank->sema_wait, 0);
 
 	tid_t child_tid = thread_create (name, PRI_DEFAULT, __do_fork, child_bank);
 	
@@ -432,7 +436,6 @@ process_exec (void *f_name) {
 		cur_bank->init_mark = false;
 		sema_up(&cur_bank->sema_init);
 	}
-	
 
 	argv[0] = strtok_r(cmdline, " ", &save_ptr);
 	while(argv[argc] != NULL){
@@ -454,9 +457,6 @@ process_exec (void *f_name) {
 
 	/* load the binary */
 	success = load (file_name, &_if);
-
-	/* If load failed, quit. */
-	/* palloc_free_page (f_name); */
 
 	if (!success)
 		return -1;
@@ -480,65 +480,53 @@ process_exec (void *f_name) {
  * does nothing. */
 int
 process_wait (tid_t child_tid UNUSED) {
-	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
-	 * XXX:       to add infinite loop here before
-	 * XXX:       implementing the process_wait. */
-
+	
 	int exit_stat;
-	struct thread *parent = thread_current();
-	struct list *child_list = &parent->child_list;
+	struct list *child_list = &thread_current()->child_list;
 	struct list_elem *e;
 
-	struct process_data_bank *child_bank = NULL;
-	struct process_data_bank *bank;
+	struct process_data_bank *child_bank;
+	bool child_tid_exist = false;
 
-	if(!list_empty(child_list))
-	{
-		for(e = list_front(child_list); e != list_end(child_list); e = list_next(e))
-		{
-			bank = list_entry(e, struct process_data_bank, elem);
-			if(bank->tid == child_tid){
-				child_bank = bank;
-				break;
-			}
-		}
-	}
-
-	if(child_bank == NULL)
-	{
-		/* pid does not refer to a direct child of the calling process.  */
-
-		/* pid is a direct child of the calling process if and only if
-		 the calling process received pid from a successful fork. */
+	/* there is no child in parent's child_list */
+	if(list_empty(child_list))
 		return -1;
+
+	e = list_front(child_list);
+	while(e != list_end(child_list))
+	{
+		child_bank = list_entry(e, struct process_data_bank, elem);
+		if(child_bank->tid == child_tid){
+			child_tid_exist = true;
+			break;
+		}
+		e = list_next(e);
 	}
-	
+
+	/* pid does not refer to a direct child of the calling process.  */
+	if(!child_tid_exist)
+		return -1;
+		
+	/* The process that calls wait has already called wait on pid. */
 	if(child_bank->wait_mark){	
-		/* The process that calls wait has already called wait on pid. */
 		return -1;
 	}
 	else{
 		child_bank->wait_mark = true;
 	}
 
-	if(child_bank->exit_mark){
-		/* child is already terminated, return immediately */
-		/* include the case, which child is terminated by kernel */
-		goto child_exited;
+	/* child is already terminated, return immediately */
+	if(!child_bank->exit_mark){
+		sema_down(&child_bank->sema_wait);
 	}
 	
-	sema_down(&child_bank->sema_wait);
-	
-	child_exited:
-		ASSERT(child_bank->exit_mark);
+	/* now, child is terminated */
+	exit_stat = child_bank->exit_stat;
 
-		exit_stat = child_bank->exit_stat;
-
-		/* no need to hold child_bank memory, freed it */
-		list_remove(&child_bank->elem);
-		palloc_free_page(child_bank);
-
-		return exit_stat;
+	/* no need to hold child_bank memory, freed it */
+	list_remove(&child_bank->elem);
+	palloc_free_page(child_bank);
+	return exit_stat;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
@@ -553,7 +541,6 @@ process_exit (void) {
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
-	
 	
 	/* 1. close all open file */
 	struct list *stdin_list = &curr->stdin_list;
@@ -612,20 +599,18 @@ process_exit (void) {
 	/* 3. close running file */
 	if(curr->running_file != NULL)
 	{
-	 	/* file_allow_write() located in file_close() */
-		file_allow_write(curr->running_file);
+	 	/* file close function include file_allow_write */
 		file_close(curr->running_file);
 	}
 
-	curr_bank->exit_mark = true;
 	bool curr_orphan = curr_bank->orphan;
+	curr_bank->exit_mark = true;
 	sema_up(&curr_bank->sema_wait);
 
 	/* 4. if current process has left alone and has no parent, 
 		clean up process_data bank itself */
-	if(curr_orphan){
+	if(curr_orphan)
 		palloc_free_page(curr_bank);
-	}
 
 	process_cleanup ();
 }
@@ -750,7 +735,6 @@ load (const char *file_name, struct intr_frame *if_) {
 	lock_acquire(&filesys_lock);
 	file = filesys_open (file_name);
 	
-	
 	if (file == NULL) {
 		printf ("load: %s: open failed\n", file_name);
 		goto done;
@@ -834,7 +818,6 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-	
 	success = true;
 
 done:
@@ -842,7 +825,6 @@ done:
 	lock_release(&filesys_lock);
 	return success;
 }
-
 
 /* Checks whether PHDR describes a valid, loadable segment in
  * FILE and returns true if so, false otherwise. */

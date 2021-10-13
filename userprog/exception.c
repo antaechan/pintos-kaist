@@ -145,14 +145,10 @@ page_fault (struct intr_frame *f) {
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
 
-	/* for bad-read,read2,write,write2,jump,jump2 */
-	if(fault_addr==NULL || fault_addr>=KERN_BASE)
+	/* for bad-ptr access, terminate process immediately */
+	if((fault_addr == NULL) || is_kernel_vaddr(fault_addr) || not_present)
 		sys_exit(-1);
 	
-	if(not_present)
-		sys_exit(-1);
-
-
 #ifdef VM
 	/* For project 3 and later. */
 	if (vm_try_handle_fault (f, fault_addr, user, write, not_present))
