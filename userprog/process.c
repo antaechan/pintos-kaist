@@ -575,7 +575,7 @@ process_exit (void) {
 		palloc_free_page(fd_t);
 	}
 	
-	/* 2. clean up process_data_bank of child_list */
+	/* 2. release process_data_bank memory of child_list */
 	
 	/* parent process doesn't wait child process and exit,
 	therefore, no need to hold child_list process_data_bank memory */
