@@ -272,6 +272,22 @@ __do_fork (void *aux) {
 	struct list_elem *e;
 	struct list_elem *e1;
 	struct fd_t *parent_fd_t;
+	struct fd *trash;
+
+	/* initialize, due to stdio_init */
+	while(!list_empty(&current->stdin_list))
+	{
+		e = list_pop_front(&current->stdin_list);
+		trash = list_entry(e, struct fd, elem);
+		palloc_free_page(trash);
+	}
+
+	while(!list_empty(&current->stdout_list))
+	{
+		e = list_pop_front(&current->stdout_list);
+		trash = list_entry(e, struct fd, elem);
+		palloc_free_page(trash);
+	}
 
 	if(!list_empty(&parent->stdin_list))
 	{
