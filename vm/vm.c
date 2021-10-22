@@ -38,6 +38,14 @@ static struct frame *vm_get_victim (void);
 static bool vm_do_claim_page (struct page *page);
 static struct frame *vm_evict_frame (void);
 
+/* hash structure Helpers */
+static unsigned
+page_hash (const struct hash_elem *p_, void *aux UNUSED);
+
+static bool
+page_less (const struct hash_elem *a_,
+           const struct hash_elem *b_, void *aux UNUSED);
+
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
  * `vm_alloc_page`. */
@@ -65,9 +73,12 @@ err:
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = NULL;
+	struct hash_elem *e;
 	/* TODO: Fill this function. */
+	page->va = pg_round_down(va);
 
-	return page;
+	e = hash_find(spt->pages, &page->helem);
+	return e != NULL ? hash_entry(e, struct page, helem) : NULL;
 }
 
 /* Insert PAGE into spt with validation. */
@@ -76,14 +87,17 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		struct page *page UNUSED) {
 	int succ = false;
 	/* TODO: Fill this function. */
-
+	if(!hash_insert(spt->pages, &page->helem))
+		succ = true;
 	return succ;
 }
 
+/* remove PAGE in spt and free all resource including memory itself */
 void
 spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
-	vm_dealloc_page (page);
-	return true;
+	
+	if(hash_delete(spt->pages, &page->helem))
+		vm_dealloc_page (page);
 }
 
 /* Get the struct frame, that will be evicted. */
@@ -175,6 +189,9 @@ vm_do_claim_page (struct page *page) {
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+	struct hash *pages = malloc(sizeof(struct hash));
+	hash_init(pages, page_hash, page_less, NULL);
+	spt->pages = pages;
 }
 
 /* Copy supplemental page table from src to dst */
@@ -188,4 +205,21 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+}
+
+/* Returns a hash value for page p. */
+static unsigned
+page_hash (const struct hash_elem *p_, void *aux UNUSED) {
+  const struct page *p = hash_entry (p_, struct page, helem);
+  return hash_bytes (&p->va, sizeof p->va);
+}
+
+/* Returns true if page a precedes page b. */
+static bool
+page_less (const struct hash_elem *a_,
+           const struct hash_elem *b_, void *aux UNUSED) {
+  const struct page *a = hash_entry (a_, struct page, helem);
+  const struct page *b = hash_entry (b_, struct page, helem);
+
+  return a->va < b->va;
 }
