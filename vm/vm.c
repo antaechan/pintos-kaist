@@ -1,6 +1,7 @@
 /* vm.c: Generic interface for virtual memory objects. */
 
 #include "threads/malloc.h"
+#include "threads/vaddr.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
 
@@ -57,15 +58,39 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 
+	/* TODO: Create the page */
+	struct page *page = malloc(sizeof(struct page));
+	if(page == NULL)
+		goto error;
+
 	/* Check wheter the upage is already occupied or not. */
 	if (spt_find_page (spt, upage) == NULL) {
-		/* TODO: Create the page, fetch the initialier according to the VM type,
+
+		/* TODO: fetch the initialier according to the VM type 
 		 * TODO: and then create "uninit" page struct by calling uninit_new. You
 		 * TODO: should modify the field after calling the uninit_new. */
+		switch(VM_TYPE(type))
+		{
+			case VM_ANON:
+				uninit_new(page, upage, init, type, aux, anon_initializer);
+				break;
 
+			case VM_FILE:
+				uninit_new(page, upage, init, type, aux, file_backed_initializer);
+				break;
+	
+			default:
+				goto error;
+		}
+
+		page->writable = writable;
 		/* TODO: Insert the page into the spt. */
+		spt_insert_page(spt, page);
+		return true;
 	}
-err:
+
+error:
+	if(page) free(page);
 	return false;
 }
 
@@ -150,7 +175,14 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
-	/* TODO: Your code goes here */
+	if(addr == NULL)
+		return false;
+	else if(is_kernel_vaddr(addr) && user)
+		return false;
+	
+	page = spt_find_page(spt, addr);
+	if(page == NULL)
+		return false;
 
 	return vm_do_claim_page (page);
 }
