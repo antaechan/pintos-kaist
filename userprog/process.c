@@ -998,7 +998,7 @@ lazy_load_segment (struct page *page, void *aux) {
 	{
 		if(file_read_at(file, pa, read_bytes, ofs) != read_bytes)
 		{
-			free(aux);
+			free(datas);
 			return false;
 		}
 	}
@@ -1006,7 +1006,7 @@ lazy_load_segment (struct page *page, void *aux) {
 	memset(pa + read_bytes, 0, zero_bytes);
 	
 	/* free aux */
-	free(aux);
+	free(datas);
 	return true;
 }
 

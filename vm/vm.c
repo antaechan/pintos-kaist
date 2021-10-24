@@ -154,8 +154,9 @@ vm_get_frame (void) {
 	void *kva;
 
 	frame->page = NULL;
+	kva = palloc_get_page(PAL_USER);
 	/* swap case */
-	if(kva = palloc_get_page(PAL_USER))
+	if(kva == NULL)
 		PANIC("to do");
 	
 	frame->kva = kva;
