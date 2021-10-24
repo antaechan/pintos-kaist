@@ -110,8 +110,16 @@ vm_evict_frame (void) {
  * space.*/
 static struct frame *
 vm_get_frame (void) {
-	struct frame *frame = NULL;
 	/* TODO: Fill this function. */
+	struct frame *frame = malloc(sizeof(struct frame));
+	void *kva;
+
+	frame->page = NULL;
+	/* swap case */
+	if(kva = palloc_get_page(PAL_USER))
+		PANIC("to do");
+	
+	frame->kva = kva;
 
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
@@ -151,8 +159,10 @@ vm_dealloc_page (struct page *page) {
 /* Claim the page that allocate on VA. */
 bool
 vm_claim_page (void *va UNUSED) {
-	struct page *page = NULL;
+	struct thread *t = thread_current();
+	struct page *page = spt_find_page(&t->spt, va);
 	/* TODO: Fill this function */
+	if(!page) return false;
 
 	return vm_do_claim_page (page);
 }
@@ -160,13 +170,17 @@ vm_claim_page (void *va UNUSED) {
 /* Claim the PAGE and set up the mmu. */
 static bool
 vm_do_claim_page (struct page *page) {
-	struct frame *frame = vm_get_frame ();
+	struct thread *t = thread_current();
+	struct frame *frame = vm_get_frame();
+	bool success;
 
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
+	success = pml4_get_page(t->pml4, page->va, frame->kva, page->writable);
+	if(!success) return false;
 
 	return swap_in (page, frame->kva);
 }
