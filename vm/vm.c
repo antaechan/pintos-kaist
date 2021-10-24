@@ -1,6 +1,7 @@
 /* vm.c: Generic interface for virtual memory objects. */
 
 #include "threads/malloc.h"
+#include "threads/vaddr.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
 
@@ -16,6 +17,7 @@ vm_init (void) {
 	register_inspect_intr ();
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
+	/* ??? */
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -37,6 +39,14 @@ static struct frame *vm_get_victim (void);
 static bool vm_do_claim_page (struct page *page);
 static struct frame *vm_evict_frame (void);
 
+/* hash structure Helpers */
+static unsigned
+page_hash (const struct hash_elem *p_, void *aux UNUSED);
+
+static bool
+page_less (const struct hash_elem *a_,
+           const struct hash_elem *b_, void *aux UNUSED);
+
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
  * `vm_alloc_page`. */
@@ -48,15 +58,39 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 
+	/* TODO: Create the page */
+	struct page *page = malloc(sizeof(struct page));
+	if(page == NULL)
+		goto error;
+
 	/* Check wheter the upage is already occupied or not. */
 	if (spt_find_page (spt, upage) == NULL) {
-		/* TODO: Create the page, fetch the initialier according to the VM type,
+
+		/* TODO: fetch the initialier according to the VM type 
 		 * TODO: and then create "uninit" page struct by calling uninit_new. You
 		 * TODO: should modify the field after calling the uninit_new. */
+		switch(VM_TYPE(type))
+		{
+			case VM_ANON:
+				uninit_new(page, upage, init, type, aux, anon_initializer);
+				break;
 
+			case VM_FILE:
+				uninit_new(page, upage, init, type, aux, file_backed_initializer);
+				break;
+	
+			default:
+				goto error;
+		}
+
+		page->writable = writable;
 		/* TODO: Insert the page into the spt. */
+		spt_insert_page(spt, page);
+		return true;
 	}
-err:
+
+error:
+	if(page) free(page);
 	return false;
 }
 
@@ -64,9 +98,12 @@ err:
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = NULL;
+	struct hash_elem *e;
 	/* TODO: Fill this function. */
+	page->va = pg_round_down(va);
 
-	return page;
+	e = hash_find(spt->pages, &page->helem);
+	return e != NULL ? hash_entry(e, struct page, helem) : NULL;
 }
 
 /* Insert PAGE into spt with validation. */
@@ -75,14 +112,17 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		struct page *page UNUSED) {
 	int succ = false;
 	/* TODO: Fill this function. */
-
+	if(!hash_insert(spt->pages, &page->helem))
+		succ = true;
 	return succ;
 }
 
+/* remove PAGE in spt and free all resource including memory itself */
 void
 spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
-	vm_dealloc_page (page);
-	return true;
+	
+	if(hash_delete(spt->pages, &page->helem))
+		vm_dealloc_page (page);
 }
 
 /* Get the struct frame, that will be evicted. */
@@ -143,7 +183,14 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
-	/* TODO: Your code goes here */
+	if(addr == NULL)
+		return false;
+	else if(is_kernel_vaddr(addr) && user)
+		return false;
+	
+	page = spt_find_page(spt, addr);
+	if(page == NULL)
+		return false;
 
 	return vm_do_claim_page (page);
 }
@@ -188,6 +235,9 @@ vm_do_claim_page (struct page *page) {
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+	struct hash *pages = malloc(sizeof(struct hash));
+	hash_init(pages, page_hash, page_less, NULL);
+	spt->pages = pages;
 }
 
 /* Copy supplemental page table from src to dst */
@@ -201,4 +251,21 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+}
+
+/* Returns a hash value for page p. */
+static unsigned
+page_hash (const struct hash_elem *p_, void *aux UNUSED) {
+  const struct page *p = hash_entry (p_, struct page, helem);
+  return hash_bytes (&p->va, sizeof p->va);
+}
+
+/* Returns true if page a precedes page b. */
+static bool
+page_less (const struct hash_elem *a_,
+           const struct hash_elem *b_, void *aux UNUSED) {
+  const struct page *a = hash_entry (a_, struct page, helem);
+  const struct page *b = hash_entry (b_, struct page, helem);
+
+  return a->va < b->va;
 }
