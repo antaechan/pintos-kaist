@@ -980,14 +980,14 @@ static struct loading_datas
 	off_t ofs;
 	size_t read_bytes;
 	size_t zero_bytes;
-}
+};
 
 static bool
 lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
-	struct loading_datas *datas = (struct loading_datas)aux;
+	struct loading_datas *datas = (struct loading_datas *)aux;
 	struct file *file = datas->file;
 	size_t read_bytes = datas->read_bytes;
 	size_t zero_bytes = datas->zero_bytes;
