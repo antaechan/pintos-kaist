@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include "threads/palloc.h"
 #include "lib/kernel/hash.h"
+#include "threads/synch.h"
 
 enum vm_type {
 	/* page not initialized */
@@ -63,6 +64,15 @@ struct page {
 	};
 };
 
+/* store information for loading page and passed as argument */
+struct loading_datas
+{
+	struct file *file;
+	off_t ofs;
+	size_t read_bytes;
+	size_t zero_bytes;
+};
+
 /* The representation of "frame" */
 struct frame {
 	void *kva;
@@ -90,6 +100,7 @@ struct page_operations {
  * All designs up to you for this. */
 struct supplemental_page_table {
 	struct hash *pages;
+	struct lock hash_lock;
 };
 
 #include "threads/thread.h"
@@ -112,6 +123,7 @@ bool vm_alloc_page_with_initializer (enum vm_type type, void *upage,
 		bool writable, vm_initializer *init, void *aux);
 void vm_dealloc_page (struct page *page);
 bool vm_claim_page (void *va);
+bool vm_alloc_and_claim_page (enum vm_type type, void *upage, bool writable);
 enum vm_type page_get_type (struct page *page);
 
 #endif  /* VM_VM_H */

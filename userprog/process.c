@@ -454,6 +454,9 @@ process_exec (void *f_name) {
 
 	/* We first kill the current context */
 	process_cleanup ();
+#ifdef VM
+	supplemental_page_table_init(&thread_current()->spt);
+#endif
 
 	/* load the binary */
 	success = load (file_name, &_if);
@@ -974,14 +977,6 @@ install_page (void *upage, void *kpage, bool writable) {
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
-static struct loading_datas
-{
-	struct file *file;
-	off_t ofs;
-	size_t read_bytes;
-	size_t zero_bytes;
-};
-
 static bool
 lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
@@ -993,21 +988,20 @@ lazy_load_segment (struct page *page, void *aux) {
 	size_t zero_bytes = datas->zero_bytes;
 	off_t ofs = datas->ofs;
 	void *pa = page->frame->kva;
-	
-	if(read_bytes > 0)
-	{
+	bool success = false;
+
+	if(read_bytes > 0){
 		if(file_read_at(file, pa, read_bytes, ofs) != read_bytes)
-		{
-			free(datas);
-			return false;
-		}
+			goto done;
 	}
 
 	memset(pa + read_bytes, 0, zero_bytes);
-	
-	/* free aux */
-	free(datas);
-	return true;
+	success = true;
+
+	done:
+		file_close(file);
+		free(datas);
+		return success;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -1041,7 +1035,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
 		struct loading_datas *aux = malloc(sizeof(struct loading_datas));
-		aux->file = file;
+		aux->file = file_duplicate(file);
 		aux->ofs = start_ofs;
 		aux->read_bytes = page_read_bytes;
 		aux->zero_bytes = page_zero_bytes;
@@ -1049,6 +1043,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
 					writable, lazy_load_segment, aux))
 		{
+			file_close(aux->file);
 			free(aux);
 			return false;
 		}
@@ -1073,17 +1068,13 @@ setup_stack (struct intr_frame *if_) {
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
-	if(!vm_alloc_page((VM_ANON | VM_STACK), stack_bottom, true))
-		return success;
-	
-	if(!vm_claim_page(stack_bottom))
+	if(!vm_alloc_and_claim_page((VM_ANON | VM_STACK), stack_bottom, true))
 		return success;
 	
 	if_->rsp = USER_STACK;
 	success = true;
 	return success;
 }
-
 
 
 #endif /* VM */
