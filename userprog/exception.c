@@ -84,9 +84,9 @@ kill (struct intr_frame *f) {
 		case SEL_UCSEG:
 			/* User's code segment, so it's a user exception, as we
 			   expected.  Kill the user process.  */
-			printf ("%s: dying due to interrupt %#04llx (%s).\n",
-					thread_name (), f->vec_no, intr_name (f->vec_no));
-			intr_dump_frame (f);
+			//printf ("%s: dying due to interrupt %#04llx (%s).\n",
+			//		thread_name (), f->vec_no, intr_name (f->vec_no));
+			//intr_dump_frame (f);
 			/* If pid did not call exit(), but was terminated by the kernel
 			 (e.g. killed due to an exception), wait(pid) must return -1 */
 			sys_exit(-1);
@@ -144,12 +144,15 @@ page_fault (struct intr_frame *f) {
 	not_present = (f->error_code & PF_P) == 0;
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
+
+	/* transiton from user to kernel mode */
+	if(user) thread_current()->saving_rsp = f->rsp;
 	
 #ifdef VM
 	/* For project 3 and later. */
 
 	/* transiton from user to kernel mode */
-	if(user) thread_current()->saving_rsp = f->rsp;
+	//if(user) thread_current()->saving_rsp = f->rsp;
 
 	if (vm_try_handle_fault (f, fault_addr, user, write, not_present))
 		return;
