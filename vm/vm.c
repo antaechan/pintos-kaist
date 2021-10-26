@@ -215,7 +215,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		return false;
 	
 	void *stack_end = pg_round_down(thread_current()->saving_rsp);
-	if (write && (stack_end - PGSIZE <= addr && (uintptr_t) addr < USER_STACK)) {
+	if (write && stack_end - PGSIZE <= addr && (uintptr_t) addr < USER_STACK) {
 	  vm_stack_growth (addr);
 	  return true;
 	}
