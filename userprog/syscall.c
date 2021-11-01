@@ -603,8 +603,8 @@ static void check_user_memory(void *uaddr)
 	/* a virtual address not mapped to physical address */
 	else if(pml4e_walk(thread_current()->pml4, uaddr, false) == NULL)
 		is_valid = false;
-	
-	/* handle these cases by terminating the user process 1*/
+
+	/* handle these cases by terminating the user process */
 	if(!is_valid)
 		sys_exit(-1);
 	

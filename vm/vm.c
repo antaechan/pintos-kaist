@@ -180,6 +180,7 @@ vm_stack_growth (void *addr UNUSED) {
 /* Handle the fault on write_protected page */
 static bool
 vm_handle_wp (struct page *page UNUSED) {
+	return false;
 }
 
 /* Return true on success */
@@ -191,15 +192,19 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	uintptr_t rsp;
 
 	/* TODO: Validate the fault */
+	/* invalid pointer */
 	if(addr == NULL)
 		return false;
-	else if(is_kernel_vaddr(addr) && user)
+
+	/* user process try to access kernel virtual address */
+	if(is_kernel_vaddr(addr) && user)
 		return false;
 
-	/* handle stack growth */
 	rsp = user ? f->rsp : thread_current()->saving_rsp;
 	bool on_stack = ((USER_STACK - STACK_SIZE_LIMIT) <= addr) && (addr <= USER_STACK);
 	bool check_address  = (addr == rsp - 8) || (rsp <= addr);
+
+	/* handle stack growth */
 	if (on_stack && check_address) {
 		vm_stack_growth (addr);
 		return true;
@@ -209,6 +214,10 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	page = spt_find_page(spt, addr);
 	if(page == NULL)
 		return false;
+
+	/* try to write on read-only page */
+	if(write && !not_present)
+		return vm_handle_wp(page);
 	
 	/* implement lazy loading */
 	return vm_do_claim_page (page);
