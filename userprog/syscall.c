@@ -15,11 +15,13 @@
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 #include "threads/palloc.h"
+#include "vm/vm.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 
 static void check_user_memory(void *uaddr);
+static void check_addr_writable(void *uaddr);
 static bool check_fd(int fd);
 
 /* System call.
@@ -270,6 +272,11 @@ int sys_read (int fd, void *buffer, unsigned length){
 
 	check_user_memory(ptr);
 	check_user_memory(ptr + length - 1);
+
+#ifdef VM
+	check_addr_writable(ptr);
+	check_addr_writable(ptr + length - 1);
+#endif
 
 	if(!check_fd(fd)) return -1;
 
@@ -604,12 +611,29 @@ static void check_user_memory(void *uaddr)
 	else if(pml4e_walk(thread_current()->pml4, uaddr, false) == NULL)
 		is_valid = false;
 
+#ifdef VM
+	if(!spt_find_page(&thread_current()->spt, uaddr))
+		is_valid = false;
+#endif
+
 	/* handle these cases by terminating the user process */
 	if(!is_valid)
 		sys_exit(-1);
 	
 	return;
 }
+
+/* check whether virtual address is writable which provided by user process */
+static void check_addr_writable(void *uaddr)
+{
+	struct page *page = spt_find_page(&thread_current()->spt, uaddr);
+	if(page == NULL)
+		sys_exit(-1);
+	
+	if(!page->writable)
+		sys_exit(-1);
+}
+
 
 static bool check_fd(int fd){
 	struct thread *t = thread_current();
