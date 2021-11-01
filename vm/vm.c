@@ -174,27 +174,7 @@ vm_get_frame (void) {
 static void
 vm_stack_growth (void *addr UNUSED) {
 	void *stack_end = pg_round_down(addr);
-	/* stack size limit : 1MB */
-	size_t stack_size_limit = 1 << 20;
-	size_t stack_size = USER_STACK - (uintptr_t)stack_end;
-
-	if(stack_size > stack_size_limit) return;
-	//PANIC("stack_size exceed stack_size_limit\n");
-
-	//void *stack_growth = stack_end;
-	//while(stack_growth < USER_STACK){
-	//	if(!vm_alloc_page(VM_STACK | VM_ANON, stack_growth, true))
-	//		break;
-	//	stack_growth += PGSIZE;
-	//}
-
-	uintptr_t *stack_growth;
-	for(stack_growth = (uintptr_t)stack_end; stack_growth < USER_STACK;
-	stack_growth += PGSIZE){
-		if(!vm_alloc_page(VM_STACK | VM_ANON, stack_growth, true))
-			break;
-	}
-	vm_claim_page(stack_end);
+	vm_alloc_and_claim_page(VM_ANON | VM_STACK, stack_end, true);
 }
 
 /* Handle the fault on write_protected page */
@@ -208,22 +188,29 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
 	struct page *page = NULL;
+	uintptr_t rsp;
+
 	/* TODO: Validate the fault */
 	if(addr == NULL)
 		return false;
 	else if(is_kernel_vaddr(addr) && user)
 		return false;
-	
-	void *stack_end = pg_round_down(thread_current()->saving_rsp);
-	if (write && stack_end - PGSIZE <= addr && (uintptr_t) addr < USER_STACK) {
-	  vm_stack_growth (addr);
-	  return true;
+
+	/* handle stack growth */
+	rsp = user ? f->rsp : thread_current()->saving_rsp;
+	bool on_stack = ((USER_STACK - STACK_SIZE_LIMIT) <= addr) && (addr <= USER_STACK);
+	bool check_address  = (addr == rsp - 8) || (rsp <= addr);
+	if (on_stack && check_address) {
+		vm_stack_growth (addr);
+		return true;
 	}
 	
+	/* check whether addr refers not present page */
 	page = spt_find_page(spt, addr);
 	if(page == NULL)
 		return false;
 	
+	/* implement lazy loading */
 	return vm_do_claim_page (page);
 }
 

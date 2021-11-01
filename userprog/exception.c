@@ -144,15 +144,9 @@ page_fault (struct intr_frame *f) {
 	not_present = (f->error_code & PF_P) == 0;
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
-
-	/* transiton from user to kernel mode */
-	if(user) thread_current()->saving_rsp = f->rsp;
 	
 #ifdef VM
 	/* For project 3 and later. */
-
-	/* transiton from user to kernel mode */
-	//if(user) thread_current()->saving_rsp = f->rsp;
 
 	if (vm_try_handle_fault (f, fault_addr, user, write, not_present))
 		return;

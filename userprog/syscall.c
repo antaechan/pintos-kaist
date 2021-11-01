@@ -59,7 +59,9 @@ void
 syscall_handler (struct intr_frame *f UNUSED) {
 	// TODO: Your implementation goes here.
 
-	/* transiton from user to kernel mode, save rsp in current thread */
+	/* when page fault occurs from kernel mode, f->rsp has undefined value.
+		should save rsp in current thread */
+	/* e.g. page fault occurs in implementing read, write system call */
 	thread_current()->saving_rsp = f->rsp;
 
 	uint64_t arg1 = f->R.rdi;
