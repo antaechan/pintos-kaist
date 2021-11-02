@@ -177,6 +177,14 @@ vm_stack_growth (void *addr UNUSED) {
 	vm_alloc_and_claim_page(VM_ANON | VM_STACK, stack_end, true);
 }
 
+bool is_stack_growth(void *addr, uintptr_t rsp)
+{
+	bool on_stack = ((USER_STACK - STACK_SIZE_LIMIT) <= addr) && (addr <= USER_STACK);
+	bool check_address  = (addr == rsp - 8) || (rsp <= addr);
+
+	return on_stack && check_address;
+}
+
 /* Handle the fault on write_protected page */
 static bool
 vm_handle_wp (struct page *page UNUSED) {
@@ -201,11 +209,8 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		return false;
 
 	rsp = user ? f->rsp : thread_current()->saving_rsp;
-	bool on_stack = ((USER_STACK - STACK_SIZE_LIMIT) <= addr) && (addr <= USER_STACK);
-	bool check_address  = (addr == rsp - 8) || (rsp <= addr);
-
 	/* handle stack growth */
-	if (on_stack && check_address) {
+	if (is_stack_growth(addr, rsp)) {
 		vm_stack_growth (addr);
 		return true;
 	}

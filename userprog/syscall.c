@@ -597,41 +597,60 @@ int sys_dup2(int oldfd, int newfd){
 /* check the virtual address validity which provided by user process */
 static void check_user_memory(void *uaddr)
 {
-	bool is_valid = true;
+	bool is_valid = false;
 	
 	/* invalid pointer */	
 	if(uaddr == NULL)
-		is_valid = false;
+		goto done;
 
 	/* a pointer into kernel virtual address space */
-	else if(is_kernel_vaddr(uaddr))
-		is_valid = false;
-
-	/* a virtual address not mapped to physical address */
-	else if(pml4e_walk(thread_current()->pml4, uaddr, false) == NULL)
-		is_valid = false;
+	if(is_kernel_vaddr(uaddr))
+		goto done;
 
 #ifdef VM
+	if (is_stack_growth(uaddr, thread_current()->saving_rsp)){
+		is_valid = true;
+		goto done;
+	}
+
 	if(!spt_find_page(&thread_current()->spt, uaddr))
-		is_valid = false;
+		goto done;
+
+#else
+	/* a virtual address not mapped to physical address */
+	if(pml4e_walk(thread_current()->pml4, uaddr, false) == NULL)
+		goto done;
 #endif
 
-	/* handle these cases by terminating the user process */
-	if(!is_valid)
-		sys_exit(-1);
-	
-	return;
+	is_valid = true;
+	done:
+		/* check whether terminates the user process */
+		if(!is_valid)
+			sys_exit(-1);
+
 }
 
 /* check whether virtual address is writable which provided by user process */
 static void check_addr_writable(void *uaddr)
 {
-	struct page *page = spt_find_page(&thread_current()->spt, uaddr);
-	if(page == NULL)
-		sys_exit(-1);
+	bool is_valid = false;
+
+	if (is_stack_growth(uaddr, thread_current()->saving_rsp)){
+		is_valid = true;
+		goto done;
+	}
 	
+	struct page *page = spt_find_page(&thread_current()->spt, uaddr);
+	if(!page)
+		goto done;
+
 	if(!page->writable)
-		sys_exit(-1);
+		goto done;
+	
+	is_valid = true;
+	done:
+		if(!is_valid)
+			sys_exit(-1);
 }
 
 

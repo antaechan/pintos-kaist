@@ -37,7 +37,7 @@ struct page_operations;
 struct thread;
 
 #define VM_TYPE(type) ((type) & 7)
-#define STACK_SIZE_LIMIT (1 << 20)
+#define STACK_SIZE_LIMIT (1 << 20)	/* stack size limit : 1MB */
 
 /* The representation of "page".
  * This is kind of "parent class", which has four "child class"es, which are
@@ -115,6 +115,7 @@ bool spt_insert_page (struct supplemental_page_table *spt, struct page *page);
 void spt_remove_page (struct supplemental_page_table *spt, struct page *page);
 
 void vm_init (void);
+bool is_stack_growth(void *addr, uintptr_t rsp);
 bool vm_try_handle_fault (struct intr_frame *f, void *addr, bool user,
 		bool write, bool not_present);
 
