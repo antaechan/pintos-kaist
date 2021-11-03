@@ -136,7 +136,15 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		case SYS_DUP2:                   
 			f->R.rax = sys_dup2((int)arg1, (int)arg2);
 			break;
-			
+
+		case SYS_MMAP:
+			f->R.rax = sys_mmap((void *)arg1, (size_t)arg2, (int)arg3, (int)arg4, (off_t)arg5);
+			break;
+
+		case SYS_MUNMAP:
+			sys_munmap((void *)arg1);
+			break;
+
 		default:
 			thread_exit();
 			break;
@@ -591,8 +599,50 @@ int sys_dup2(int oldfd, int newfd){
 	if(newfd >= t->next_fd) t->next_fd = newfd + 1;
 	return newfd;
 }
-/* Projects 2 and later. ----------------------------------- */
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
+/* Projects 2 and later. ----------------------------------- */                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+
+/* Project 3 */
+void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
+{
+	
+	struct thread *t = thread_current();
+	struct fd_t *fd_t = search_fd_t_double_list(fd, &t->fd_list);
+
+	/* handle error case */
+	/* file_descriptors which is invalid, or console input and output should not mappable */
+	if(!fd_t)	goto error;
+	struct file *file = fd_t->file;
+
+	lock_acquire(&filesys_lock);
+	off_t file_size = file_length(file);
+	lock_release(&filesys_lock);
+
+	if(file_size == 0 || length == 0)
+		goto error;
+
+	if(pg_ofs(addr) == 0)
+		goto error;
+
+	if(addr == NULL)
+		goto error;
+
+	if(is_kernel_vaddr(addr) || is_kernel_vaddr(addr + length))
+		goto error;
+	
+
+	/* include return NULL when some page in the middle is allocated already */
+	return do_mmap(addr, length, writable, file, offset);
+
+	error:
+		return NULL;
+}
+
+void sys_munmap(void *addr)
+{
+
+}
+
+
 
 /* check the virtual address validity which provided by user process */
 static void check_user_memory(void *uaddr)
@@ -608,12 +658,13 @@ static void check_user_memory(void *uaddr)
 		goto done;
 
 #ifdef VM
-	if (is_stack_growth(uaddr, thread_current()->saving_rsp)){
+	struct page *page = spt_find_page(&thread_current()->spt, uaddr);
+	if (is_stack_growth(uaddr, thread_current()->saving_rsp) && !page){
 		is_valid = true;
 		goto done;
 	}
 
-	if(!spt_find_page(&thread_current()->spt, uaddr))
+	if(!page)
 		goto done;
 
 #else

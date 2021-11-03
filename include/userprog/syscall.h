@@ -35,4 +35,9 @@ void sys_close (int fd);
 int sys_dup2(int oldfd, int newfd);
 /* Projects 2 and later. ------------------------------------*/
 
+/* project 3 ------------------------------------------------*/
+void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset);
+void sys_munmap(void *addr);
+
+
 #endif /* userprog/syscall.h */
