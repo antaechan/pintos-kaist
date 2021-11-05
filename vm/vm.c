@@ -295,7 +295,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 	struct hash_iterator i;
 	struct page *page;
 	struct loading_datas *aux;
-
+	struct loading_datas *parent_aux;
 	hash_first(&i, src->pages);
 	while(hash_next(&i))
 	{
@@ -308,19 +308,30 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 				if(aux == NULL)
 					return false;
 
-				struct loading_datas *parent_aux = page->uninit.aux;
-				aux->file = file_duplicate(parent_aux->file);
-				aux->ofs = parent_aux->ofs;
-				aux->read_bytes = parent_aux->read_bytes;
-				aux->zero_bytes = parent_aux->zero_bytes;
-				
-				if(!vm_alloc_page_with_initializer(page->uninit.type, page->va, 
-					page->writable, page->uninit.init, aux)){
-					if(aux)	free(aux);
-					return false;
+				switch(page->uninit.type)
+				{
+					case VM_ANON:
+						parent_aux = page->uninit.aux;
+						aux->file = file_duplicate(parent_aux->file);
+						aux->ofs = parent_aux->ofs;
+						aux->read_bytes = parent_aux->read_bytes;
+						aux->zero_bytes = parent_aux->zero_bytes;
+						
+						if(!vm_alloc_page_with_initializer(page->uninit.type, page->va, 
+							page->writable, page->uninit.init, aux)){
+							if(aux)	free(aux);
+							return false;
+						}
+						break;
+
+					case VM_FILE:
+						break;
+
+					default:
+						return false;
 				}
 				break;
-
+				
 			case VM_ANON:
 				if(!vm_alloc_and_claim_page(page->operations->type, page->va, page->writable))
 					return false;

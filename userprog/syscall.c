@@ -620,7 +620,7 @@ void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 	if(file_size == 0 || length == 0)
 		goto error;
 
-	if(pg_ofs(addr) == 0)
+	if(pg_ofs(addr) != 0)
 		goto error;
 
 	if(addr == NULL)
@@ -629,7 +629,6 @@ void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 	if(is_kernel_vaddr(addr) || is_kernel_vaddr(addr + length))
 		goto error;
 	
-
 	/* include return NULL when some page in the middle is allocated already */
 	return do_mmap(addr, length, writable, file, offset);
 
@@ -637,9 +636,9 @@ void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 		return NULL;
 }
 
-void sys_munmap(void *addr)
-{
-
+void sys_munmap(void *addr){
+	/* don't need to check address invalidity */
+	do_munmap(addr);
 }
 
 

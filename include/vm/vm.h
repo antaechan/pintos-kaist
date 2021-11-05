@@ -51,7 +51,6 @@ struct page {
 	/* Your implementation */
 	struct hash_elem helem;
 	bool writable;
-	void *aux;
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -72,6 +71,7 @@ struct loading_datas
 	off_t ofs;
 	size_t read_bytes;
 	size_t zero_bytes;
+	int total_length;
 };
 
 /* The representation of "frame" */
