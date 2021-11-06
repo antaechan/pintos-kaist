@@ -623,6 +623,9 @@ void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 	if(pg_ofs(addr) != 0)
 		goto error;
 
+	if(pg_ofs(offset) != 0)	/* offset should be aligned to PGSIZE, testcase: mmap-bad-off */
+		goto error;
+
 	if(addr == NULL)
 		goto error;
 

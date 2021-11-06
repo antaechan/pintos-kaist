@@ -50,4 +50,9 @@ anon_swap_out (struct page *page) {
 static void
 anon_destroy (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
+	
+	if(page->frame)
+		/* corresponding physical memory will be freed at process_clean_up */
+		/* no need : palloc_free_page(page->frame->kva) */
+		free(page->frame);
 }

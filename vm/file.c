@@ -63,10 +63,10 @@ file_backed_destroy (struct page *page) {
 
 	file_close(file_page->file);
 
-	if(page->frame){
-		palloc_free_page(page->frame->kva);
+	if(page->frame)
+		/* corresponding physical memory will be freed at process_clean_up */
+		/* no need : palloc_free_page(page->frame->kva) */
 		free(page->frame);
-	}
 }
 
 /* Do the mmap */
