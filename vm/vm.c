@@ -6,6 +6,9 @@
 #include "vm/inspect.h"
 #include "threads/synch.h"
 
+struct list frame_list;
+struct list_elem *clock;
+struct lock clock_lock;
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -20,6 +23,10 @@ vm_init (void) {
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
 	/* ??? */
+	list_init(&frame_list);
+	// clock = list_begin(&frame_list);
+	clock = NULL;
+	lock_init(&clock_lock);
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -128,11 +135,91 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 		vm_dealloc_page (page);
 }
 
+static struct list_elem *
+list_next_cycle (struct list *lst, struct list_elem *elem) {
+    struct list_elem *cand_elem = elem;
+    if (cand_elem == list_back (lst))
+	    cand_elem = list_front (lst);
+    else
+	    cand_elem = list_next (cand_elem);
+    return cand_elem;
+}
+
 /* Get the struct frame, that will be evicted. */
 static struct frame *
 vm_get_victim (void) {
 	struct frame *victim = NULL;
+	struct thread *t = thread_current();
 	 /* TODO: The policy for eviction is up to you. */
+	 /* second-chance algorithm */
+
+	// size_t frame_list_size = list_size(&frame_list);
+	// int i;
+
+	// lock_acquire(&clock_lock);
+
+	// for(i = 0; i < 2*frame_list_size; i++){
+	// 	victim = list_entry(clock, struct frame, frame_elem);
+
+	// 	if(pml4_is_accessed(t->pml4, victim->page->va))
+	// 		pml4_set_accessed(t->pml4, victim->page->va, 0);	
+	// 	else{
+	// 		if(clock == list_end(&frame_list))
+	// 			clock = list_begin(&frame_list);
+	// 		else{
+	// 			clock = list_next(&frame_list);
+	// 		}
+	// 		break;
+	// 	}
+			
+	// 	if(clock == list_end(&frame_list))
+	// 		clock = list_begin(&frame_list);
+	// 	else
+	// 		clock = list_next(&frame_list);
+
+	// 	printf("%d\n", i);
+	// }
+	
+	// list_remove(clock);
+	// lock_release(&clock_lock);
+
+	int i = 100;
+	lock_acquire(&clock_lock);
+	struct list_elem *cand_elem = clock;
+	if (cand_elem == NULL && !list_empty (&frame_list))
+	    cand_elem = list_front (&frame_list);
+	while(cand_elem != NULL) {
+	    victim = list_entry (cand_elem, struct frame, frame_elem);
+	    if (!pml4_is_accessed (t->pml4, victim->page->va))
+		    break;
+	    pml4_set_accessed(t->pml4, victim->page->va, false);
+		printf("%d\n", i++);
+
+	    cand_elem = list_next_cycle (&frame_list, cand_elem);
+	}
+	printf("0\n");
+	clock = list_next_cycle (&frame_list, cand_elem);
+	list_remove (cand_elem);
+	lock_release(&clock_lock);
+
+	// int i=100;
+
+	// lock_acquire(&clock_lock);
+	// if (clock == NULL && !list_empty (&frame_list))
+	//     clock = list_begin (&frame_list);
+	// while(clock != NULL) {
+	//     victim = list_entry (clock, struct frame, frame_elem);
+	//     if (!pml4_is_accessed (t->pml4, victim->page->va))
+	// 	    break;
+	//     pml4_set_accessed(t->pml4, victim->page->va, false);
+	// 	printf("%d\n", i++);
+
+	//     clock = list_next_cycle (&frame_list, clock);
+	// }
+	// printf("0\n");
+	// clock = list_next_cycle (&frame_list, clock);
+	// list_remove (clock);
+	// lock_release(&clock_lock);
 
 	return victim;
 }
@@ -143,6 +230,17 @@ static struct frame *
 vm_evict_frame (void) {
 	struct frame *victim UNUSED = vm_get_victim ();
 	/* TODO: swap out the victim and return the evicted frame. */
+	if(!victim) return NULL;
+
+	// if(!swap_out(victim->page))
+	// 	printf("2\n");
+	// 	PANIC("Swap disk is full!!\n");
+	struct page *page = victim->page;
+	bool swap_done = swap_out (page);
+	if (!swap_done) PANIC("Swap disk is full!\n");
+	
+	victim->page = NULL;
+	memset(victim->kva, 0, PGSIZE);
 
 	return NULL;
 }
@@ -155,15 +253,20 @@ static struct frame *
 vm_get_frame (void) {
 	/* TODO: Fill this function. */
 	struct frame *frame = malloc(sizeof(struct frame));
-	void *kva;
+	//void *kva;
 
+	frame->kva = palloc_get_page(PAL_USER);
 	frame->page = NULL;
-	kva = palloc_get_page(PAL_USER);
+
 	/* swap case */
-	if(kva == NULL)
-		PANIC("to do");
-	
-	frame->kva = kva;
+	if(frame->kva == NULL){
+		printf("//////////////swap case!///////////\n");
+	  	free(frame);
+	  	frame = vm_evict_frame();
+	}
+
+	//list_push_back(&frame_list, &frame->frame_elem);
+	//frame->page = NULL;
 
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
@@ -257,6 +360,22 @@ vm_do_claim_page (struct page *page) {
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
+
+	//printf("set link completed\n");
+
+	//ASSERT(clock!=NULL);
+
+	if (clock){
+		//clock is NOT NULL
+		list_insert(clock, &frame->frame_elem);
+		printf("7-1\n");
+	}	
+	else{
+		//clock is NULL
+		list_push_back(&frame_list, &frame->frame_elem);
+		printf("7-2\n");
+	}
+	//list_push_back(&frame_list, &frame->frame_elem);
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	success = pml4_set_page(t->pml4, page->va, frame->kva, page->writable);

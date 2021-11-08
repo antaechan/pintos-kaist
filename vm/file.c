@@ -41,12 +41,41 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 static bool
 file_backed_swap_in (struct page *page, void *kva) {
 	struct file_page *file_page UNUSED = &page->file;
+
+	/* no file for swap in */
+	printf("10\n");
+	if(!file_page->file) return false;
+
+	off_t read_length 
+		= file_read_at(file_page->file, kva, file_page->length, file_page->ofs);
+
+	printf("11\n");
+	
+	if(read_length != file_page->length) return false;
+
+	size_t zero_length = PGSIZE - file_page->length;
+	printf("12\n");
+	memset(kva + read_length, 0, zero_length);
+
+	return true;
 }
 
 /* Swap out the page by writeback contents to the file. */
 static bool
 file_backed_swap_out (struct page *page) {
 	struct file_page *file_page UNUSED = &page->file;
+	struct thread *t = thread_current();
+
+	if(!page) return false;
+
+	if(pml4_is_dirty(t->pml4, page->va)){
+		file_write_at(file_page->file, page->va, file_page->length, file_page->ofs);
+		pml4_set_dirty(t->pml4, page->va, 0);
+	}
+	pml4_clear_page(t->pml4, page->va);
+	page->frame = NULL;
+	
+	return true;
 }
 
 /* Destory the file backed page. PAGE will be freed by the caller. */
@@ -66,6 +95,7 @@ file_backed_destroy (struct page *page) {
 	if(page->frame)
 		/* corresponding physical memory will be freed at process_clean_up */
 		/* no need : palloc_free_page(page->frame->kva) */
+		list_remove(&page->frame->frame_elem);
 		free(page->frame);
 }
 
