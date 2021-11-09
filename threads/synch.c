@@ -206,15 +206,16 @@ lock_acquire (struct lock *lock) {
 	int depth = 0;
 
 	/* if lock holder is exist */
-	if (!thread_mlfqs && lock_holder){
+	if (!thread_mlfqs && lock_holder && lock_holder->priority < cur->priority){
 		cur->wait_for_what_lock = lock;
 		list_insert_ordered(&lock_holder->donor_list, &cur->donor_elem, thread_priority_more, 0);
-		priority_donate(cur, depth);
+		priority_donate(cur);
 	}
-
 	sema_down (&lock->semaphore);
+
 	lock->holder = cur;
 	if(!thread_mlfqs) cur->wait_for_what_lock = NULL;
+	list_push_back(&cur->locks, &lock->lockelem);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -252,6 +253,8 @@ lock_release (struct lock *lock) {
 		update_donor_lock(lock);
 		priority_update(thread_current());
 	}
+
+	list_remove(&lock->lockelem);
 	sema_up (&lock->semaphore);
 }
 

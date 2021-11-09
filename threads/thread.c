@@ -315,7 +315,16 @@ thread_exit (void) {
 	process_exit ();
 #endif
 
+	struct thread *curr = thread_current();
+	struct list_elem *e;
 	/* release all holding lock */
+	while(!list_empty(&curr->locks))
+	{
+		e = list_pop_front(&curr->locks);
+		struct lock *lock = list_entry(e, struct lock, lockelem);
+		lock_release(lock);
+	}
+
 
 	/* Just set our status to dying and schedule another process.
 	   We will be destroyed during the call to schedule_tail(). */
@@ -486,6 +495,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	intr_set_level(old_level);
 
 	list_init(&t->donor_list);     /* implement Priority Donation */
+	list_init(&t->locks);
 	t->original_priority = priority;
 	t->wait_for_what_lock = NULL;
 	t->magic = THREAD_MAGIC;
@@ -846,33 +856,21 @@ void thread_recalculate_priority()
 }
 
 /* Donate priority to thread, which is locking 'A' that current thread wants to get (while depth < 9) */
-// recursively? 
-//void priority_donate(struct thread * thread)
-//{
-//	int depth;
-//	struct thread *cur = thread;
-//
-//	int cur_priority = cur->priority;
-//	
-//	for(depth = 0; depth < DONATION_DEPTH; depth++){     /* nested donation */
-//		if(cur->wait_for_what_lock == NULL) break;
-//		else{
-//			cur = cur->wait_for_what_lock->holder;
-//			cur->priority = cur_priority;
-//		}
-//	}
-//}
-
-void priority_donate(struct thread *thread, int depth){
+void priority_donate(struct thread * thread)
+{
+	int depth;
 	struct thread *cur = thread;
-	int cur_priority = cur->priority;
 
-	if(depth==DONATION_DEPTH || cur->wait_for_what_lock==NULL) return;
-	else{
+	int cur_priority = cur->priority;
+	
+	for(depth = 0; depth < DONATION_DEPTH; depth++){     /* nested donation */
+		if(cur->wait_for_what_lock == NULL)
+			break;
+		
 		cur = cur->wait_for_what_lock->holder;
-		cur->priority = cur_priority;
-		depth++;
-		priority_donate(cur, depth);
+		
+		if(cur->priority < cur_priority)
+			cur->priority = cur_priority;
 	}
 }
 

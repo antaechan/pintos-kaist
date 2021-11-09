@@ -112,6 +112,8 @@ struct thread {
 	struct list_elem donor_elem;
 	struct lock *wait_for_what_lock;
 
+	struct list locks;
+
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
@@ -206,7 +208,7 @@ void thread_recalculate_recent_cpu(void);
 void thread_recalculate_priority(void);
 
 //void priority_donate(struct thread *thread);
-void priority_donate(struct thread *thread, int depth);
+void priority_donate(struct thread *thread);
 
 void priority_update(struct thread *thread);
 void update_donor_lock(struct lock *lock);
