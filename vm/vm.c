@@ -284,7 +284,6 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 	struct hash *pages = malloc(sizeof(struct hash));
 	hash_init(pages, page_hash, page_less, NULL);
 	spt->pages = pages;
-	lock_init(&spt->hash_lock);
 }
 
 /* Copy supplemental page table from src to dst */
@@ -357,11 +356,8 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
-
-	lock_acquire(&spt->hash_lock);
 	hash_destroy(spt->pages, spt_destroy);
 	free(spt->pages);
-	lock_release(&spt->hash_lock);
 }
 
 /* Returns a hash value for page p. */
