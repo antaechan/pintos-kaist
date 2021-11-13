@@ -625,8 +625,10 @@ void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 	if(addr == NULL)
 		goto error;
 
-	if(is_kernel_vaddr(addr) || is_kernel_vaddr(addr + length))
-		goto error;
+	for(int i = 0; i <= length; i++){
+		if(is_kernel_vaddr(addr + i))
+			goto error;
+	}
 	
 	/* include return NULL when some page in the middle is allocated already */
 	return do_mmap(addr, length, writable, file, offset);

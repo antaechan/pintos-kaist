@@ -102,7 +102,7 @@ file_backed_destroy (struct page *page) {
 void *
 do_mmap (void *addr, size_t length, int writable,
 		struct file *file, off_t offset) {
-	
+			
 	uint32_t read_bytes = length;
 
 	off_t start_ofs = offset;
