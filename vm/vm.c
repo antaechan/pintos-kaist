@@ -5,7 +5,10 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "threads/synch.h"
+#include "threads/mmu.h"
 
+static struct list frame_list;
+static struct lock frame_lock;
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -19,7 +22,8 @@ vm_init (void) {
 	register_inspect_intr ();
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
-	/* ??? */
+	list_init(&frame_list);
+	lock_init(&frame_lock);
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -132,8 +136,25 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 static struct frame *
 vm_get_victim (void) {
 	struct frame *victim = NULL;
+	struct thread *curr = thread_current();
 	 /* TODO: The policy for eviction is up to you. */
+	
+	if(list_empty(&frame_list))
+		PANIC("Impossible, memory leak happens");
+		
+	struct list_elem *e = list_begin(&frame_list);
+	while(true){
+		victim = list_entry(e, struct frame, elem);
+		if(!pml4_is_accessed(curr->pml4, victim->page->va))
+			break;
+		pml4_set_accessed(curr->pml4, victim->page->va, false);
 
+		if(e == list_end(&frame_list))
+			list_begin(&frame_list);
+		else
+			list_next(e);
+	}
+	
 	return victim;
 }
 
@@ -143,8 +164,23 @@ static struct frame *
 vm_evict_frame (void) {
 	struct frame *victim UNUSED = vm_get_victim ();
 	/* TODO: swap out the victim and return the evicted frame. */
+	if(!swap_out(victim->page))
+		PANIC("swap memory is full");
+	
+	/* pml4 connection clear */
+	pml4_clear_page(thread_current()->pml4, victim->page->va);
 
-	return NULL;
+	/* page, frame reference clear */
+	victim->page->frame = NULL;
+	victim->page = NULL;
+
+	/* frame_list remove */
+	list_remove(&victim->elem);
+
+	/* frame physical memory clean up */
+	memset(victim->kva, 0, PGSIZE);
+
+	return victim;
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
@@ -155,15 +191,17 @@ static struct frame *
 vm_get_frame (void) {
 	/* TODO: Fill this function. */
 	struct frame *frame = malloc(sizeof(struct frame));
-	void *kva;
 
 	frame->page = NULL;
-	kva = palloc_get_page(PAL_USER);
-	/* swap case */
-	if(kva == NULL)
-		PANIC("to do");
+	frame->kva = palloc_get_page(PAL_USER);
 	
-	frame->kva = kva;
+	if(frame->kva == NULL){
+		/* swap case */
+		free(frame);
+		frame = vm_evict_frame();
+	}
+	
+	list_push_back(&frame_list, &frame->elem);
 
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
@@ -209,14 +247,15 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		return false;
 
 	rsp = user ? f->rsp : thread_current()->saving_rsp;
+	page = spt_find_page(spt, addr);
+
 	/* handle stack growth */
-	if (is_stack_growth(addr, rsp)) {
+	if (is_stack_growth(addr, rsp) && !page) {
 		vm_stack_growth (addr);
 		return true;
 	}
 	
 	/* check whether addr refers not present page */
-	page = spt_find_page(spt, addr);
 	if(page == NULL)
 		return false;
 
@@ -232,7 +271,9 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
  * DO NOT MODIFY THIS FUNCTION. */
 void
 vm_dealloc_page (struct page *page) {
+	lock_acquire(&frame_lock);
 	destroy (page);
+	lock_release(&frame_lock);
 	free (page);
 }
 
@@ -251,7 +292,11 @@ vm_claim_page (void *va UNUSED) {
 static bool
 vm_do_claim_page (struct page *page) {
 	struct thread *t = thread_current();
+	bool swap_succ;
+
+	lock_acquire(&frame_lock);
 	struct frame *frame = vm_get_frame();
+
 	bool success;
 
 	/* Set links */
@@ -262,7 +307,9 @@ vm_do_claim_page (struct page *page) {
 	success = pml4_set_page(t->pml4, page->va, frame->kva, page->writable);
 	if(!success) return false;
 	
-	return swap_in (page, frame->kva);
+	swap_succ = swap_in (page, frame->kva);
+	lock_release(&frame_lock);
+	return swap_succ;
 }
 
 /* allocate and claim page, the actual content in physcial memeory, frame is not initialized */
@@ -383,3 +430,4 @@ spt_destroy(struct hash_elem *e, void *aux UNUSED)
 	struct page *page = hash_entry(e, struct page, helem);
 	vm_dealloc_page(page);
 }
+

@@ -41,12 +41,37 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 static bool
 file_backed_swap_in (struct page *page, void *kva) {
 	struct file_page *file_page UNUSED = &page->file;
+
+	struct file *file = file_page->file;
+	size_t read_bytes = file_page->read_bytes;
+	off_t ofs = file_page->ofs;
+
+	if(read_bytes != file_read_at(file, kva, read_bytes, ofs))
+		return false;
+	
+	if(read_bytes < PGSIZE)
+		memset(kva + read_bytes, 0, PGSIZE - read_bytes);
+
+	return true;
 }
 
 /* Swap out the page by writeback contents to the file. */
 static bool
 file_backed_swap_out (struct page *page) {
 	struct file_page *file_page UNUSED = &page->file;
+	struct thread *curr = thread_current();
+
+	struct file *file = file_page->file;
+	size_t read_bytes = file_page->read_bytes;
+	off_t ofs = file_page->ofs;
+
+	/* write back */
+	if(pml4_is_dirty(curr->pml4, page->va))
+	{
+		file_write_at(file, page->va, read_bytes, ofs);
+		pml4_set_dirty(curr->pml4, page->va, false);
+	}
+	return true;
 }
 
 /* Destory the file backed page. PAGE will be freed by the caller. */
@@ -54,19 +79,23 @@ static void
 file_backed_destroy (struct page *page) {
 	struct file_page *file_page UNUSED = &page->file;
 
+	struct file *file = file_page->file;
+	size_t read_bytes = file_page->read_bytes;
+	off_t ofs = file_page->ofs;
+
 	/* write back */
 	if(pml4_is_dirty(thread_current()->pml4, page->va))
-	{
-		file_seek(file_page->file, file_page->ofs);
-		file_write(file_page->file, page->va, file_page->length);
-	}
+		file_write_at(file, page->va, read_bytes, ofs);
 
 	file_close(file_page->file);
 
-	if(page->frame)
+	if(page->frame){
 		/* corresponding physical memory will be freed at process_clean_up */
 		/* no need : palloc_free_page(page->frame->kva) */
+		list_remove(&page->frame->elem);
 		free(page->frame);
+	}
+
 }
 
 /* Do the mmap */
@@ -151,10 +180,10 @@ lazy_load_file (struct page *page, void *aux) {
 	void *pa = page->frame->kva;
 	bool success = false;
 	
-	file_read_at(file, pa, read_bytes, ofs);
-
-	if(zero_bytes > 0)
-		memset(pa + read_bytes, 0, zero_bytes);
+	page->file.read_bytes = file_read_at(file, pa, read_bytes, ofs);
+	
+	if(page->file.read_bytes < PGSIZE)
+		memset(pa + read_bytes, 0, PGSIZE - page->file.read_bytes);
 	
 	pml4_set_dirty(thread_current()->pml4, page->va, false);
 	success = true;

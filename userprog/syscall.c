@@ -613,11 +613,7 @@ void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 	if(!fd_t)	goto error;
 	struct file *file = fd_t->file;
 
-	lock_acquire(&filesys_lock);
-	off_t file_size = file_length(file);
-	lock_release(&filesys_lock);
-
-	if(file_size == 0 || length == 0)
+	if(length == 0)
 		goto error;
 
 	if(pg_ofs(addr) != 0)
@@ -641,7 +637,10 @@ void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 
 void sys_munmap(void *addr){
 	/* don't need to check address invalidity */
+	lock_acquire(&filesys_lock);
 	do_munmap(addr);
+	lock_release(&filesys_lock);
+
 }
 
 
