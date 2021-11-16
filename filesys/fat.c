@@ -153,6 +153,15 @@ fat_boot_create (void) {
 void
 fat_fs_init (void) {
 	/* TODO: Your code goes here. */
+	
+	unsigned int data_sectors = fat_fs->bs.total_sectors - fat_fs->bs.fat_sectors - 1;
+	fat_fs->fat_length = (data_sectors / fat_fs->bs.sectors_per_cluster);
+	
+	fat_fs->data_start = fat_fs->bs.fat_start + fat_fs->bs.fat_sectors;
+	
+	fat_fs->last_clst = fat_fs->bs.root_dir_cluster + 1;
+
+	lock_init(&fat_fs->write_lock);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -178,16 +187,20 @@ fat_remove_chain (cluster_t clst, cluster_t pclst) {
 void
 fat_put (cluster_t clst, cluster_t val) {
 	/* TODO: Your code goes here. */
+	fat_fs->fat[clst] = val;
 }
 
 /* Fetch a value in the FAT table. */
 cluster_t
 fat_get (cluster_t clst) {
 	/* TODO: Your code goes here. */
+	return fat_fs->fat[clst];
 }
 
 /* Covert a cluster # to a sector number. */
 disk_sector_t
 cluster_to_sector (cluster_t clst) {
 	/* TODO: Your code goes here. */
+	/* why clst - 1?? */
+	return (fat_fs->data_start + clst * fat_fs->bs.sectors_per_cluster);
 }
