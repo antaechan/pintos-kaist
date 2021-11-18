@@ -174,6 +174,26 @@ fat_fs_init (void) {
 cluster_t
 fat_create_chain (cluster_t clst) {
 	/* TODO: Your code goes here. */
+	cluster_t new_clst = fat_fs->last_clst;
+
+	/* fat_fs->last_clst update */
+	while(fat_get(new_clst) != 0){
+		new_clst++;
+		if(new_clst > (fat_fs->fat_length - 1))
+			return 0;
+	}
+
+	ASSERT(fat_fs->bs.root_dir_cluster < new_clst &&
+		 new_clst <= (fat_fs->fat_length - 1));
+
+	lock_acquire(&fat_fs->write_lock);
+
+	if(clst)  fat_put(clst, new_clst);
+	fat_put(new_clst, EOChain);
+
+	fat_fs->last_clst = new_clst + 1;
+	lock_release(&fat_fs->write_lock);
+	return new_clst;
 }
 
 /* Remove the chain of clusters starting from CLST.
@@ -181,6 +201,28 @@ fat_create_chain (cluster_t clst) {
 void
 fat_remove_chain (cluster_t clst, cluster_t pclst) {
 	/* TODO: Your code goes here. */
+
+	lock_acquire(&fat_fs->write_lock);
+	if(pclst){
+		ASSERT(fat_get(pclst) == clst);
+		fat_put(pclst, EOChain);
+	}
+	
+	cluster_t curr = clst;
+	cluster_t next;
+	
+	while(curr){
+		next = fat_get(curr);
+		fat_put(curr, 0);
+		if(curr < fat_fs->last_clst)
+			fat_fs->last_clst = curr;
+
+		if(next == EOChain)
+			break;
+		
+		curr = next;
+	}
+	lock_release(&fat_fs->write_lock);
 }
 
 /* Update a value in the FAT table. */
@@ -201,6 +243,37 @@ fat_get (cluster_t clst) {
 disk_sector_t
 cluster_to_sector (cluster_t clst) {
 	/* TODO: Your code goes here. */
-	/* why clst - 1?? */
-	return (fat_fs->data_start + clst * fat_fs->bs.sectors_per_cluster);
+	return (fat_fs->data_start + (clst - 1) * fat_fs->bs.sectors_per_cluster);
 }
+
+/* Covert a sector # to a cluster number. */
+cluster_t
+sector_to_cluster (disk_sector_t sector) {
+	return (sector - fat_fs->data_start) / fat_fs->bs.sectors_per_cluster + 1;
+}
+
+/* Allocates CNT sectors from the FAT and stores
+ * the first into *SECTORP.
+ * Returns true if successful, false if all sectors were
+ * available. */
+bool
+fat_allocate (size_t cnt, disk_sector_t *sectorp) {
+	
+	ASSERT(cnt > 0);
+
+	cluster_t start = fat_create_chain(0);
+	cluster_t iter = start;
+
+	for (int i = 0; i < cnt; i++){
+		iter = fat_create_chain(iter);
+
+		if (iter == 0){
+			fat_remove_chain(start, 0);
+			return false;
+		}
+	}
+	*sectorp = cluster_to_sector(start);
+
+	return true;
+}
+

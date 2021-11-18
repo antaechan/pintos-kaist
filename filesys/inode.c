@@ -6,6 +6,7 @@
 #include "filesys/filesys.h"
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
+#include "filesys/fat.h"
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
@@ -43,10 +44,19 @@ struct inode {
 static disk_sector_t
 byte_to_sector (const struct inode *inode, off_t pos) {
 	ASSERT (inode != NULL);
-	if (pos < inode->data.length)
-		return inode->data.start + pos / DISK_SECTOR_SIZE;
-	else
+	if (pos >= inode->data.length)
 		return -1;
+
+	int sector_cnt = pos / DISK_SECTOR_SIZE;
+	
+	cluster_t iter = sector_to_cluster(inode->data.start);
+	while (sector_cnt > 0)
+	{
+		iter = fat_get(iter);
+		sector_cnt--;
+	}
+
+	return cluster_to_sector(iter);
 }
 
 /* List of open inodes, so that opening a single inode twice
@@ -80,14 +90,21 @@ inode_create (disk_sector_t sector, off_t length) {
 		size_t sectors = bytes_to_sectors (length);
 		disk_inode->length = length;
 		disk_inode->magic = INODE_MAGIC;
-		if (free_map_allocate (sectors, &disk_inode->start)) {
+		if (fat_allocate (sectors, &disk_inode->start)) {
 			disk_write (filesys_disk, sector, disk_inode);
 			if (sectors > 0) {
 				static char zeros[DISK_SECTOR_SIZE];
-				size_t i;
+				cluster_t clst_idx;
+				disk_sector_t sector_idx;
 
-				for (i = 0; i < sectors; i++) 
-					disk_write (filesys_disk, disk_inode->start + i, zeros); 
+				disk_write (filesys_disk, disk_inode->start, zeros);
+				clst_idx = fat_get(clst_idx);
+
+				while(clst_idx != EOChain){
+					sector_idx = cluster_to_sector(clst_idx);
+					disk_write (filesys_disk, sector_idx, zeros);
+					clst_idx = fat_get(clst_idx);
+				}
 			}
 			success = true; 
 		} 
@@ -159,9 +176,8 @@ inode_close (struct inode *inode) {
 
 		/* Deallocate blocks if removed. */
 		if (inode->removed) {
-			free_map_release (inode->sector, 1);
-			free_map_release (inode->data.start,
-					bytes_to_sectors (inode->data.length)); 
+			fat_remove_chain (inode->sector, 0);
+			fat_remove_chain (inode->data.start, 0); 
 		}
 
 		free (inode); 
@@ -241,6 +257,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 		return 0;
 
 	while (size > 0) {
+		ASSERT(offset + size <= inode->data.length);
 		/* Sector to write, starting byte offset within sector. */
 		disk_sector_t sector_idx = byte_to_sector (inode, offset);
 		int sector_ofs = offset % DISK_SECTOR_SIZE;
