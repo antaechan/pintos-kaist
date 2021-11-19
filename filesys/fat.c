@@ -259,7 +259,7 @@ sector_to_cluster (disk_sector_t sector) {
 bool
 fat_allocate (size_t cnt, disk_sector_t *sectorp) {
 	
-	ASSERT(cnt > 0);
+	if(cnt == 0)  return true;
 
 	cluster_t start = fat_create_chain(0);
 	cluster_t iter = start;

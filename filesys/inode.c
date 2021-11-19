@@ -256,8 +256,44 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 	if (inode->deny_write_cnt)
 		return 0;
 
+	/* Implement file growth, extended file */
+	bool file_growth = (offset + size) > inode_length(inode);
+	if(file_growth)
+	{
+		size_t sectors_after_growth = bytes_to_sectors(offset + size);
+		size_t sectors_before_growth = bytes_to_sectors(inode_length(inode));
+		size_t additional_sectors = sectors_after_growth - sectors_before_growth;
+		
+		disk_sector_t sector_head;
+		if(fat_allocate(additional_sectors, &sector_head))
+		{
+			if(inode->data.start == 0){
+				inode->data.start = sector_head;
+			}
+			else if(additional_sectors != 0)
+			{
+				disk_sector_t sector_tail = byte_to_sector(inode, inode_length(inode) - 1);
+				
+				cluster_t clst_tail = sector_to_cluster(sector_tail);
+				cluster_t clst_head = sector_to_cluster(sector_head);
+
+				ASSERT(fat_get(clst_tail) == EOChain);
+				fat_put(clst_tail, clst_head);
+			}
+
+			/* inode data update */
+			inode->data.length = offset + size;
+			disk_write(filesys_disk, inode->sector, &inode->data);
+
+		}
+		else{
+			/* fat allocate failed, no enough memory to allocate in disk */
+			return 0;
+		}
+	}
+
 	while (size > 0) {
-		ASSERT(offset + size <= inode->data.length);
+			
 		/* Sector to write, starting byte offset within sector. */
 		disk_sector_t sector_idx = byte_to_sector (inode, offset);
 		int sector_ofs = offset % DISK_SECTOR_SIZE;
@@ -299,7 +335,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 		offset += chunk_size;
 		bytes_written += chunk_size;
 	}
-	free (bounce);
+	if(bounce) free (bounce);
 
 	return bytes_written;
 }
