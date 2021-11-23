@@ -511,10 +511,12 @@ init_thread (struct thread *t, const char *name, int priority) {
 
 	list_init(&t->stdin_list);
 	list_init(&t->stdout_list);
-
+#endif 
+#ifdef EFILESYS
+	/* TODO: how to initialize cwd */
+	t->cwd = NULL;
+	list_init(&t->dir_list);
 #endif
-	
-		
 
 }
 

@@ -34,9 +34,10 @@ fsutil_cat (char **argv) {
 
 	struct file *file;
 	char *buffer;
+	int type;
 
 	printf ("Printing '%s' to the console...\n", file_name);
-	file = filesys_open (file_name);
+	file = filesys_open (file_name, &type);
 	if (file == NULL)
 		PANIC ("%s: open failed", file_name);
 	buffer = palloc_get_page (PAL_ASSERT);
@@ -83,6 +84,7 @@ fsutil_put (char **argv) {
 	struct file *dst;
 	off_t size;
 	void *buffer;
+	int type;
 
 	printf ("Putting '%s' into the file system...\n", file_name);
 
@@ -105,9 +107,9 @@ fsutil_put (char **argv) {
 		PANIC ("%s: invalid file size %d", file_name, size);
 
 	/* Create destination file. */
-	if (!filesys_create (file_name, size))
+	if (!filesys_create (file_name, size, _FILE))
 		PANIC ("%s: create failed", file_name);
-	dst = filesys_open (file_name);
+	dst = filesys_open (file_name, &type);
 	if (dst == NULL)
 		PANIC ("%s: open failed", file_name);
 
@@ -146,6 +148,7 @@ fsutil_get (char **argv) {
 	struct file *src;
 	struct disk *dst;
 	off_t size;
+	int type;
 
 	printf ("Getting '%s' from the file system...\n", file_name);
 
@@ -155,7 +158,7 @@ fsutil_get (char **argv) {
 		PANIC ("couldn't allocate buffer");
 
 	/* Open source file. */
-	src = filesys_open (file_name);
+	src = filesys_open (file_name, &type);
 	if (src == NULL)
 		PANIC ("%s: open failed", file_name);
 	size = file_length (src);

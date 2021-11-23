@@ -16,8 +16,9 @@
 struct inode_disk {
 	disk_sector_t start;                /* First data sector. */
 	off_t length;                       /* File size in bytes. */
-	unsigned magic;                     /* Magic number. */
-	uint32_t unused[125];               /* Not used. */
+	enum file_type type;				/* file: FILE, directory: DIRECTORY */
+	unsigned magic;                    /* Magic number. */
+	uint32_t unused[124];               /* Not used. */
 };
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -75,7 +76,7 @@ inode_init (void) {
  * Returns true if successful.
  * Returns false if memory or disk allocation fails. */
 bool
-inode_create (disk_sector_t sector, off_t length) {
+inode_create (disk_sector_t sector, off_t length, enum file_type type) {
 	struct inode_disk *disk_inode = NULL;
 	bool success = false;
 
@@ -88,7 +89,9 @@ inode_create (disk_sector_t sector, off_t length) {
 	disk_inode = calloc (1, sizeof *disk_inode);
 	if (disk_inode != NULL) {
 		size_t sectors = bytes_to_sectors (length);
+		disk_inode->start = 0;
 		disk_inode->length = length;
+		disk_inode->type = type;
 		disk_inode->magic = INODE_MAGIC;
 		if (fat_allocate (sectors, &disk_inode->start)) {
 			disk_write (filesys_disk, sector, disk_inode);
@@ -263,7 +266,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 		size_t sectors_after_growth = bytes_to_sectors(offset + size);
 		size_t sectors_before_growth = bytes_to_sectors(inode_length(inode));
 		size_t additional_sectors = sectors_after_growth - sectors_before_growth;
-		
+
 		disk_sector_t sector_head;
 		if(fat_allocate(additional_sectors, &sector_head))
 		{
@@ -363,4 +366,9 @@ inode_allow_write (struct inode *inode) {
 off_t
 inode_length (const struct inode *inode) {
 	return inode->data.length;
+}
+
+enum file_type
+inode_get_type (struct inode *inode){
+	return inode->data.type;
 }

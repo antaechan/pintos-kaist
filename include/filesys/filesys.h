@@ -14,10 +14,15 @@ struct lock filesys_lock;
 /* Disk used for file system. */
 extern struct disk *filesys_disk;
 
+enum file_type {
+    _FILE = 0,       /* ordinary file */
+    _DIRECTORY = 1,  /* directory */
+};
+
 void filesys_init (bool format);
 void filesys_done (void);
-bool filesys_create (const char *name, off_t initial_size);
-struct file *filesys_open (const char *name);
+bool filesys_create (const char *name, off_t initial_size, enum file_type type);
+void *filesys_open (const char *name, int *type);
 bool filesys_remove (const char *name);
 
 #endif /* filesys/filesys.h */

@@ -6,6 +6,9 @@
 #include "filesys/inode.h"
 #include "threads/malloc.h"
 #include "filesys/fat.h"
+#include "threads/thread.h"
+#include <stdbool.h>
+
 
 /* A directory. */
 struct dir {
@@ -24,7 +27,7 @@ struct dir_entry {
  * given SECTOR.  Returns true if successful, false on failure. */
 bool
 dir_create (disk_sector_t sector, size_t entry_cnt) {
-	return inode_create (sector, entry_cnt * sizeof (struct dir_entry));
+	return inode_create (sector, entry_cnt * sizeof (struct dir_entry), _DIRECTORY);
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -53,6 +56,54 @@ dir_open_root (void) {
 	root_sector = cluster_to_sector(ROOT_DIR_CLUSTER);
 #endif
 	return dir_open(inode_open(root_sector));
+}
+
+struct dir *
+dir_open_path(char *path)
+{
+	/* make recursively? */
+	int l = strlen(path) + 1;
+	char *path_copy = malloc(sizeof(char) * l);
+	struct dir *cwd, *next_d;
+	char **save_ptr;
+	struct inode *inode = NULL;
+	struct thread *t = thread_current();
+
+	if(!strcmp(path_copy[0], "/"))
+		/* absolute path */
+		cwd = dir_open_root();
+	else
+	{
+		/* relative path */
+		if(!(cwd = t->cwd))
+			cwd = dir_open_root();
+	}
+
+	char *dir_name = strtok_r(path_copy, "/", &save_ptr);
+	while(dir_name)
+	{
+		if(!dir_lookup(cwd, dir_name, &inode))
+			goto error;		
+
+		next_d = dir_open(inode);
+		if(next_d == NULL)
+			goto error;
+
+		dir_close(cwd);
+		cwd = next_d;
+
+		dir_name = strtok_r(NULL, "/", &save_ptr);
+	}
+
+	/* if cwd was removed, close directory and return NULL */
+	if(cwd->inode->removed)
+		goto error;
+
+	return cwd;
+
+	error:
+		if(cwd) dir_close(cwd);
+		return NULL;
 }
 
 /* Opens and returns a new directory for the same inode as DIR.

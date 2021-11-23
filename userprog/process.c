@@ -133,7 +133,12 @@ initd (void *aux) {
 
 	/* 2. store memory block data into child thread */
 	child->data_bank = child_bank;
-	
+
+#ifdef EFILESYS
+	/* set up cwd */
+	child->cwd = dir_open_root();
+#endif
+
 	if (process_exec (child_bank->cmdline) < 0)	
 		PANIC("Fail to launch initd\n");
 
@@ -246,9 +251,31 @@ __do_fork (void *aux) {
 
 	/* 2. store memory block data into child thread */
 	current->data_bank = child_bank;
-	
-	/* 3. store parent into child thread ?? */
 
+#ifdef EFILESYS
+	/* inherit cwd */
+	if (parent->cwd != NULL)
+		current->cwd = dir_reopen(parent->cwd);
+	else
+		current->cwd = dir_open_root();
+
+	/* duplicate dir_desc object */
+	if(!list_empty(&parent->dir_list))
+	{
+		for(e = list_front(&parent->dir_list); e != list_end(&parent->dir_list); e = list_next(e))
+		{
+			struct dir_desc *parent_desc = list_entry(e, struct dir_desc, elem);
+			struct dir_desc *curr_desc = (struct dir_desc *)palloc_get_page(0);
+			if(curr_desc == NULL)
+				goto error;
+			
+			curr_desc->fd = parent_desc->fd;
+			curr_desc->dir = dir_reopen(parent_desc->dir);
+			list_push_back(&current->dir_list, &curr_desc->elem);
+		}
+	}
+#endif	
+	
 	/* 1. Read the cpu context to local stack. */
 	memcpy (&if_, parent_if, sizeof (struct intr_frame));
 
@@ -577,6 +604,22 @@ process_exit (void) {
 		file_close(fd_t->file);
 		palloc_free_page(fd_t);
 	}
+
+#ifdef EFILESYS
+	/* close cwd */
+	if(curr->cwd)	dir_close(curr->cwd);
+
+	struct list *dir_list = &curr->dir_list;
+	/* close all dir_desc object */
+	while(!list_empty(dir_list))
+	{
+		struct list_elem *e = list_pop_front(dir_list);
+		struct dir_desc *desc = list_entry(e, struct dir_desc, elem);
+		dir_close(desc->dir);
+		palloc_free_page(desc);
+	}
+	
+#endif
 	
 	/* 2. release process_data_bank memory of child_list */
 	
@@ -726,7 +769,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	struct file *file = NULL;
 	off_t file_ofs;
 	bool success = false;
-	int i;
+	int i, type;
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
@@ -736,7 +779,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	
 	/* Open executable file. */
 	lock_acquire(&filesys_lock);
-	file = filesys_open (file_name);
+	file = filesys_open (file_name, &type);
 	
 	if (file == NULL) {
 		printf ("load: %s: open failed\n", file_name);

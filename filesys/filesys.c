@@ -12,6 +12,7 @@
 struct disk *filesys_disk;
 
 static void do_format (void);
+static void filesys_parse_path(const char *, char *, char *);
 
 /* Initializes the file system module.
  * If FORMAT is true, reformats the file system. */
@@ -53,22 +54,78 @@ filesys_done (void) {
 #endif
 }
 
+static void
+filesys_parse_path(const char *file_path, char *directory, char *file_name)
+{
+	/* not empty file */
+	ASSERT(strlen(file_path) > 0);
+
+	size_t l = strlen(file_path) + 1;
+	char *path_copy = malloc(sizeof(char) * l);
+	int count = 0;
+
+	strlcpy(path_copy, file_path, l);
+	int i = path_copy + l - 1;
+	
+	for(; i >= 0; i--){
+		if(!strcmp(path_copy[i], "/")){
+			count++;
+			if(i != 0){
+				path_copy[i] = '\0';
+				break;
+			}
+		}
+	}
+
+	if(count == 0)
+	{
+		/* relative path */
+		*directory = '\0';
+		strlcpy(file_name, path_copy, strlen(path_copy) + 1);
+	}
+	else if(count == 1)
+	{
+		/* / or /a */
+		directory[0] = '/';
+		directory[1] = '\0';
+		strlcpy(file_name, ++path_copy, strlen(path_copy) + 1);
+	}
+	else
+	{
+		strlcpy(directory, path_copy, strlen(path_copy) + 1);
+		path_copy += i + 1;
+		strlcpy(file_name, path_copy, strlen(path_copy) + 1);
+	}
+
+	free(path_copy);
+}
+
+
 /* Creates a file named NAME with the given INITIAL_SIZE.
  * Returns true if successful, false otherwise.
  * Fails if a file named NAME already exists,
  * or if internal memory allocation fails. */
 bool
-filesys_create (const char *name, off_t initial_size) {
+filesys_create (const char *file_path, off_t initial_size, enum file_type type) {
 	disk_sector_t inode_sector = 0;
-	struct dir *dir = dir_open_root ();
+
+	/* parse file_path */
+	char directory[strlen(file_path) + 1];
+	char file_name[strlen(file_path) + 1];
+	filesys_parse_path(file_path, directory, file_name);
+	
+	/* open directory which file will be stored in */
+	struct dir *dir = dir_open_path(directory);
+	
 	bool success = (dir != NULL
 			&& fat_allocate (1, &inode_sector)
-			&& inode_create (inode_sector, initial_size)
-			&& dir_add (dir, name, inode_sector));
+			&& inode_create (inode_sector, initial_size, type)
+			&& dir_add (dir, file_name, inode_sector));
+
 	if (!success && inode_sector != 0)
 		fat_remove_chain (inode_sector, 0);
-	dir_close (dir);
 
+	dir_close (dir);
 	return success;
 }
 
@@ -77,16 +134,43 @@ filesys_create (const char *name, off_t initial_size) {
  * otherwise.
  * Fails if no file named NAME exists,
  * or if an internal memory allocation fails. */
-struct file *
-filesys_open (const char *name) {
-	struct dir *dir = dir_open_root ();
+void *
+filesys_open (const char *file_path, int *type) {
+
+	/* parse file_path */
+	char directory[strlen(file_path) + 1];
+	char file_name[strlen(file_path) + 1];
+	filesys_parse_path(file_path, directory, file_name);
+	
+	/* open directory which file will be stored in */
+	/* directory "" is ok */
+	struct dir *dir = dir_open_path(directory);
+
+	/* case: open just root directory, handle file_name "" */
+	if(!strcmp(dir, "/") && file_name[0] = '\0')
+	{
+		*type = _DIRECTORY;
+		return (void *)dir;
+	}
+
 	struct inode *inode = NULL;
+	void *ret == NULL;
+	
+	ASSERT(strlen(file_name) > 0);
+	if (dir != NULL && dir_lookup (dir, file_name, &inode))
+	{
+		*type = inode_get_type(inode);
 
-	if (dir != NULL)
-		dir_lookup (dir, name, &inode);
-	dir_close (dir);
+		if(*type == _FILE)
+			ret = (void *)file_open(inode);
 
-	return file_open (inode);
+		else if(*type == _DIRECTORY)
+			ret = (void *)dir_open(inode);
+	}	
+	
+	/* clean up open directory */
+	if(dir) dir_close (dir);
+	return ret;
 }
 
 /* Deletes the file named NAME.

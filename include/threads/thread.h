@@ -137,6 +137,10 @@ struct thread {
 
 	uintptr_t saving_rsp;
 #endif
+#ifdef EFILESYS
+	struct dir *cwd;					/* current working directory */
+	struct list dir_list;				/* hold directory_desc as element */
+#endif
 	
 	/* Owned by thread.c. */
 	struct intr_frame tf;               /* Information for switching */
@@ -155,6 +159,12 @@ struct fd{
 	struct list_elem elem;
 };
 
+struct dir_desc
+{
+	int fd;
+	struct dir *dir;
+	struct list_elem elem;
+};
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.

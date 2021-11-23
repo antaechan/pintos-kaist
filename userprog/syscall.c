@@ -212,7 +212,7 @@ bool sys_create (const char *file, unsigned initial_size)
 	bool success;
 
 	lock_acquire(&filesys_lock);
-	success = filesys_create(file, initial_size);
+	success = filesys_create(file, initial_size, _FILE);
 	lock_release(&filesys_lock);
 
 	return success;
@@ -234,18 +234,24 @@ bool sys_remove (const char *file)
 int sys_open (const char *file)
 {
 	check_user_memory(file);
-	struct file *open_file;
+	void *open_file;
 	int fd;
+	int *type;
 
 	lock_acquire(&filesys_lock);
-	open_file = filesys_open(file); 
+	open_file = filesys_open(file, type);
 	if(open_file == NULL){
 		lock_release(&filesys_lock);
 		return -1;
 	}
-	fd = insert_file2list(open_file, thread_current());
-	lock_release(&filesys_lock);
 
+	if(*type == _FILE)
+		fd = insert_file2list((struct file *)open_file, thread_current());
+
+	else if(*type == _DIRECTORY)
+		fd = insert_dir2list((struct dir *)open_file, thread_current());
+
+	lock_release(&filesys_lock);
 	return fd;
 }
 
@@ -526,6 +532,20 @@ int insert_file2list(struct file *file, struct thread *thread){
 		if(fd_t) palloc_free_page(fd_t);
 		if(fd_num) palloc_free_page(fd_num);
 		return -1;
+}
+
+/* insert file to fd_list and increase next_fd */
+int insert_dir2list(struct dir *dir, struct thread *curr){
+
+	struct dir_desc *dir_desc= (struct dir_desc *)palloc_get_page(0);
+	if(dir_desc == NULL)
+		return -1;
+
+	dir_desc->fd = curr->next_fd++;
+	dir_desc->dir = dir;
+	list_push_back(&curr->dir_list, &dir_desc->elem);
+
+	return dir_desc->fd;
 }
 
 /* ----------------- Extra Credit -------------------------- */
