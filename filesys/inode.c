@@ -372,3 +372,8 @@ enum file_type
 inode_get_type (struct inode *inode){
 	return inode->data.type;
 }
+
+bool
+inode_removed(struct inode *inode){
+	return inode->removed;
+}

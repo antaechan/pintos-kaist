@@ -96,9 +96,9 @@ dir_open_path(char *path)
 	}
 
 	/* if cwd was removed, close directory and return NULL */
-	if(cwd->inode->removed)
+	if(inode_removed(cwd->inode))
 		goto error;
-
+	
 	return cwd;
 
 	error:

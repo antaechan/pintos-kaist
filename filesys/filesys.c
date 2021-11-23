@@ -147,14 +147,14 @@ filesys_open (const char *file_path, int *type) {
 	struct dir *dir = dir_open_path(directory);
 
 	/* case: open just root directory, handle file_name "" */
-	if(!strcmp(dir, "/") && file_name[0] = '\0')
+	if(!strcmp(dir, "/") && file_name[0] == '\0')
 	{
 		*type = _DIRECTORY;
 		return (void *)dir;
 	}
 
 	struct inode *inode = NULL;
-	void *ret == NULL;
+	void *ret = NULL;
 	
 	ASSERT(strlen(file_name) > 0);
 	if (dir != NULL && dir_lookup (dir, file_name, &inode))

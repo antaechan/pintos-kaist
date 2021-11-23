@@ -262,6 +262,7 @@ __do_fork (void *aux) {
 	/* duplicate dir_desc object */
 	if(!list_empty(&parent->dir_list))
 	{
+		struct list_elem *e;
 		for(e = list_front(&parent->dir_list); e != list_end(&parent->dir_list); e = list_next(e))
 		{
 			struct dir_desc *parent_desc = list_entry(e, struct dir_desc, elem);
@@ -618,7 +619,7 @@ process_exit (void) {
 		dir_close(desc->dir);
 		palloc_free_page(desc);
 	}
-	
+
 #endif
 	
 	/* 2. release process_data_bank memory of child_list */
