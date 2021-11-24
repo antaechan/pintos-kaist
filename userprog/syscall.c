@@ -236,19 +236,19 @@ int sys_open (const char *file)
 	check_user_memory(file);
 	void *open_file;
 	int fd;
-	int *type;
+	int type;
 
 	lock_acquire(&filesys_lock);
-	open_file = filesys_open(file, type);
+	open_file = filesys_open(file, &type);
 	if(open_file == NULL){
 		lock_release(&filesys_lock);
 		return -1;
 	}
 
-	if(*type == _FILE)
+	if(type == _FILE)
 		fd = insert_file2list((struct file *)open_file, thread_current());
 
-	else if(*type == _DIRECTORY)
+	else if(type == _DIRECTORY)
 		fd = insert_dir2list((struct dir *)open_file, thread_current());
 
 	lock_release(&filesys_lock);

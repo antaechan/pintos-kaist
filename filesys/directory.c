@@ -61,30 +61,37 @@ dir_open_root (void) {
 struct dir *
 dir_open_path(char *path)
 {
+
 	/* make recursively? */
 	int l = strlen(path) + 1;
-	char *path_copy = malloc(sizeof(char) * l);
-	struct dir *cwd, *next_d;
-	char **save_ptr;
+	char path_copy[l];
+	strlcpy(path_copy, path, l);
+
+	struct dir *cwd = NULL;
+	struct dir *next_d;
+
 	struct inode *inode = NULL;
 	struct thread *t = thread_current();
 
-	if(!strcmp(path_copy[0], "/"))
+	if(path_copy[0] == '/')
 		/* absolute path */
 		cwd = dir_open_root();
 	else
 	{
 		/* relative path */
-		if(!(cwd = t->cwd))
+		if(t->cwd == NULL)
 			cwd = dir_open_root();
+		else
+			cwd = dir_reopen(t->cwd);
 	}
 
+	char **save_ptr;
 	char *dir_name = strtok_r(path_copy, "/", &save_ptr);
 	while(dir_name)
 	{
 		if(!dir_lookup(cwd, dir_name, &inode))
-			goto error;		
-
+			goto error;
+		
 		next_d = dir_open(inode);
 		if(next_d == NULL)
 			goto error;
@@ -102,7 +109,7 @@ dir_open_path(char *path)
 	return cwd;
 
 	error:
-		if(cwd) dir_close(cwd);
+		dir_close(cwd);
 		return NULL;
 }
 

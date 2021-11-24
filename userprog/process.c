@@ -619,7 +619,7 @@ process_exit (void) {
 		dir_close(desc->dir);
 		palloc_free_page(desc);
 	}
-
+	
 #endif
 	
 	/* 2. release process_data_bank memory of child_list */

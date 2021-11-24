@@ -61,14 +61,13 @@ filesys_parse_path(const char *file_path, char *directory, char *file_name)
 	ASSERT(strlen(file_path) > 0);
 
 	size_t l = strlen(file_path) + 1;
-	char *path_copy = malloc(sizeof(char) * l);
-	int count = 0;
-
+	char path_copy[l];
 	strlcpy(path_copy, file_path, l);
-	int i = path_copy + l - 1;
+	int count = 0;
+	int i;
 	
-	for(; i >= 0; i--){
-		if(!strcmp(path_copy[i], "/")){
+	for(i = l - 1; i >= 0; i--){
+		if(path_copy[i] == '/'){
 			count++;
 			if(i != 0){
 				path_copy[i] = '\0';
@@ -81,23 +80,20 @@ filesys_parse_path(const char *file_path, char *directory, char *file_name)
 	{
 		/* relative path */
 		*directory = '\0';
-		strlcpy(file_name, path_copy, strlen(path_copy) + 1);
+		strlcpy(file_name, path_copy, l);
 	}
 	else if(count == 1)
 	{
 		/* / or /a */
 		directory[0] = '/';
 		directory[1] = '\0';
-		strlcpy(file_name, ++path_copy, strlen(path_copy) + 1);
+		strlcpy(file_name, path_copy + 1, l);
 	}
 	else
 	{
-		strlcpy(directory, path_copy, strlen(path_copy) + 1);
-		path_copy += i + 1;
-		strlcpy(file_name, path_copy, strlen(path_copy) + 1);
+		strlcpy(directory, path_copy, l);
+		strlcpy(file_name, (path_copy + i + 1), l);
 	}
-
-	free(path_copy);
 }
 
 
@@ -112,11 +108,13 @@ filesys_create (const char *file_path, off_t initial_size, enum file_type type) 
 	/* parse file_path */
 	char directory[strlen(file_path) + 1];
 	char file_name[strlen(file_path) + 1];
+
 	filesys_parse_path(file_path, directory, file_name);
 	
 	/* open directory which file will be stored in */
 	struct dir *dir = dir_open_path(directory);
 	
+	/* TODO: handle case filesys_create("/") */
 	bool success = (dir != NULL
 			&& fat_allocate (1, &inode_sector)
 			&& inode_create (inode_sector, initial_size, type)
@@ -142,13 +140,12 @@ filesys_open (const char *file_path, int *type) {
 	char file_name[strlen(file_path) + 1];
 	filesys_parse_path(file_path, directory, file_name);
 	
-	/* open directory which file will be stored in */
-	/* directory "" is ok */
 	struct dir *dir = dir_open_path(directory);
-
-	/* case: open just root directory, handle file_name "" */
-	if(!strcmp(dir, "/") && file_name[0] == '\0')
-	{
+	
+	/* 1. directory "" is ok, open relative path */
+		
+	/* 2. file name "", open root directory */
+	if(file_name[0] == '\0'){
 		*type = _DIRECTORY;
 		return (void *)dir;
 	}
