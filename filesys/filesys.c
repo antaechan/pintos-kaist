@@ -63,15 +63,16 @@ filesys_parse_path(const char *file_path, char *directory, char *file_name)
 	char path_copy[l];
 	strlcpy(path_copy, file_path, l);
 	int count = 0;
-	int i;
+	int i, delim;
 	
 	for(i = l - 1; i >= 0; i--){
 		if(path_copy[i] == '/'){
-			count++;
-			if(i != 0){
+			if(i != 0 && count == 0)
+			{
+				delim = i;
 				path_copy[i] = '\0';
-				break;
 			}
+			count++;
 		}
 	}
 
@@ -91,7 +92,7 @@ filesys_parse_path(const char *file_path, char *directory, char *file_name)
 	else
 	{
 		strlcpy(directory, path_copy, l);
-		strlcpy(file_name, (path_copy + i + 1), l);
+		strlcpy(file_name, (path_copy + delim + 1), l);
 	}
 }
 
