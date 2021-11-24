@@ -249,6 +249,13 @@ dir_remove (struct dir *dir, const char *name) {
 	if (inode == NULL)
 		goto done;
 
+	/* handle removing non-empty directory: return false */
+	/* if(inode_get_type(inode) == _DIRECTORY)
+	{
+		if(!inode->data.empty)
+			goto done;
+	} */
+
 	/* Erase directory entry. */
 	e.in_use = false;
 	if (inode_write_at (dir->inode, &e, sizeof e, ofs) != sizeof e)
