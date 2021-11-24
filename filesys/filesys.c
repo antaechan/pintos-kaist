@@ -81,7 +81,7 @@ filesys_parse_path(const char *file_path, char *directory, char *file_name)
 		*directory = '\0';
 		strlcpy(file_name, path_copy, l);
 	}
-	else if(count == 1)
+	else if((count == 1) && (path_copy[0] == '/'))
 	{
 		/* / or /a */
 		directory[0] = '/';
