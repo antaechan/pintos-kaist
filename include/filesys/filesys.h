@@ -24,5 +24,5 @@ void filesys_done (void);
 bool filesys_create (const char *name, off_t initial_size, enum file_type type);
 void *filesys_open (const char *name, int *type);
 bool filesys_remove (const char *name);
-
+bool filesys_chdir(char *dir);
 #endif /* filesys/filesys.h */

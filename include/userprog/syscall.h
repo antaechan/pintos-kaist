@@ -31,7 +31,12 @@ int sys_write (int fd, const void *buffer, unsigned length);
 void sys_seek (int fd, unsigned position);
 unsigned sys_tell (int fd);
 void sys_close (int fd);
-
+bool sys_chdir (const char *dir);
+bool sys_mkdir (const char *dir);
+bool sys_readdir (int fd, char *name);
+bool sys_isdir (int fd);
+int sys_inumber (int fd);
+	
 /* Extra Credit */
 int sys_dup2(int oldfd, int newfd);
 /* Projects 2 and later. ------------------------------------*/

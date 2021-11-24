@@ -7,6 +7,7 @@
 #include "filesys/inode.h"
 #include "filesys/directory.h"
 #include "devices/disk.h"
+#include "threads/thread.h"
 
 /* The disk that contains the file system. */
 struct disk *filesys_disk;
@@ -57,8 +58,6 @@ filesys_done (void) {
 static void
 filesys_parse_path(const char *file_path, char *directory, char *file_name)
 {
-	/* not empty file */
-	ASSERT(strlen(file_path) > 0);
 
 	size_t l = strlen(file_path) + 1;
 	char path_copy[l];
@@ -114,7 +113,8 @@ filesys_create (const char *file_path, off_t initial_size, enum file_type type) 
 	/* open directory which file will be stored in */
 	struct dir *dir = dir_open_path(directory);
 	
-	/* TODO: handle case filesys_create("/") */
+	/* TODO: handle case filesys_create("/")
+			 return false at current state	 */
 	bool success = (dir != NULL
 			&& fat_allocate (1, &inode_sector)
 			&& inode_create (inode_sector, initial_size, type)
@@ -134,6 +134,9 @@ filesys_create (const char *file_path, off_t initial_size, enum file_type type) 
  * or if an internal memory allocation fails. */
 void *
 filesys_open (const char *file_path, int *type) {
+
+	/* empty file open handling */
+	if(strlen(file_path) == 0)	return NULL;
 
 	/* parse file_path */
 	char directory[strlen(file_path) + 1];
@@ -176,11 +179,39 @@ filesys_open (const char *file_path, int *type) {
  * or if an internal memory allocation fails. */
 bool
 filesys_remove (const char *name) {
-	struct dir *dir = dir_open_root ();
-	bool success = dir != NULL && dir_remove (dir, name);
+
+	char directory[strlen(name) + 1];
+	char file_name[strlen(name) + 1];
+
+	filesys_parse_path(name, directory, file_name);
+
+	/* 1. directory "" is ok, relative path */	
+	
+	/* 2. file name "", remove root directory */
+	if(file_name[0] == '\0')
+		return false;
+
+	struct dir *dir = dir_open_path(directory);
+
+	bool success = (dir != NULL && dir_remove (dir, name));
 	dir_close (dir);
 
 	return success;
+}
+
+bool
+filesys_chdir(char *dir_name)
+{	
+	struct thread *t = thread_current();
+	struct dir *dir = dir_open_path(dir_name);
+
+	if(dir == NULL)
+		return false;
+
+	dir_close(t->cwd);
+	t->cwd = dir;
+
+	return true;
 }
 
 /* Formats the file system. */

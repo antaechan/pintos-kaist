@@ -197,6 +197,7 @@ dir_add (struct dir *dir, const char *name, disk_sector_t inode_sector) {
 	ASSERT (name != NULL);
 
 	/* Check NAME for validity. */
+	/* case: empty file create handling */
 	if (*name == '\0' || strlen (name) > NAME_MAX)
 		return false;
 

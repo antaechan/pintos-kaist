@@ -133,9 +133,6 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			sys_close((int)arg1);
 			break;
 
-		case SYS_DUP2:                   
-			f->R.rax = sys_dup2((int)arg1, (int)arg2);
-			break;
 
 		case SYS_MMAP:
 			f->R.rax = sys_mmap((void *)arg1, (size_t)arg2, (int)arg3, (int)arg4, (off_t)arg5);
@@ -143,6 +140,30 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
 		case SYS_MUNMAP:
 			sys_munmap((void *)arg1);
+			break;
+		
+		case SYS_CHDIR:
+			f->R.rax = sys_chdir((const char*)arg1);
+			break;
+
+		case SYS_MKDIR:
+			f->R.rax = sys_mkdir((const char*)arg1);
+			break;
+
+		case SYS_READDIR:
+			f->R.rax = sys_readdir((int)arg1, (char *)arg2);
+			break;
+
+		case SYS_ISDIR:
+			f->R.rax = sys_isdir((int)arg1);
+			break;
+
+		case SYS_INUMBER:
+			f->R.rax = sys_inumber((int)arg1);
+			break;
+
+		case SYS_DUP2:                   
+			f->R.rax = sys_dup2((int)arg1, (int)arg2);
 			break;
 
 		default:
@@ -437,8 +458,27 @@ void sys_close (int fd){
 	fd_t = search_fd_t_double_list(fd, &t->fd_list);
 	fd_num = search_fd_double_list(fd, &t->fd_list);
 
+	/* search dir_list */
 	if (fd_num == NULL)
+	{
+		struct list *dir_list = &t->dir_list;
+		struct list_elem *e1;
+		if(!list_empty(dir_list))
+		{
+			for(e1 = list_begin(dir_list); e1 != list_end(dir_list); e1 = list_next(e1))
+			{	
+				struct dir_desc *desc = list_entry(e1, struct dir_desc, elem);
+				if(desc->fd == fd)
+				{
+					dir_close(desc->dir);
+					list_remove(e1);
+					palloc_free_page(desc);
+					break;
+				}
+			}
+		}
 		goto done;
+	}
 
 	list_remove(&fd_num->elem);
 	palloc_free_page(fd_num);
@@ -454,6 +494,48 @@ void sys_close (int fd){
 	done:
 		lock_release(&filesys_lock);
 		return;
+}
+
+bool
+sys_chdir (const char *dir) {
+	check_user_memory(dir);
+
+	lock_acquire(&filesys_lock);
+	bool success = filesys_chdir(dir);
+	lock_release(&filesys_lock);
+	return success;
+}
+
+bool
+sys_mkdir (const char *dir) {
+	check_user_memory(dir);
+
+	lock_acquire(&filesys_lock);
+	/* file extended support */
+	bool success = filesys_create(dir, 0, _DIRECTORY);
+	lock_release(&filesys_lock);
+	return success;
+}
+
+
+bool
+sys_readdir (int fd, char *name) {
+	check_user_memory(name);
+	
+/* #ifdef VM
+	check_addr_writable(name);
+#endif */
+	return true;
+}
+
+bool
+sys_isdir (int fd) {
+	return true;
+}
+
+int
+sys_inumber (int fd) {
+	return true;	
 }
 
 struct fd *search_fd_single_list(int fd, struct list *list){
