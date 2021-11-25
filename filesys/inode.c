@@ -255,11 +255,13 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 	const uint8_t *buffer = buffer_;
 	off_t bytes_written = 0;
 	uint8_t *bounce = NULL;
+	int length;
 
 	if (inode->deny_write_cnt)
 		return 0;
 
 	/* Implement file growth, extended file */
+
 	bool file_growth = (offset + size) > inode_length(inode);
 	if(file_growth)
 	{

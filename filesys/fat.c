@@ -174,6 +174,7 @@ fat_fs_init (void) {
 cluster_t
 fat_create_chain (cluster_t clst) {
 	/* TODO: Your code goes here. */
+	lock_acquire(&fat_fs->write_lock);
 	cluster_t new_clst = fat_fs->last_clst;
 
 	/* fat_fs->last_clst update */
@@ -185,8 +186,6 @@ fat_create_chain (cluster_t clst) {
 
 	ASSERT(fat_fs->bs.root_dir_cluster < new_clst &&
 		 new_clst <= (fat_fs->fat_length - 1));
-
-	lock_acquire(&fat_fs->write_lock);
 
 	if(clst)  fat_put(clst, new_clst);
 	fat_put(new_clst, EOChain);
@@ -264,7 +263,7 @@ fat_allocate (size_t cnt, disk_sector_t *sectorp) {
 	cluster_t start = fat_create_chain(0);
 	cluster_t iter = start;
 
-	for (int i = 0; i < cnt; i++){
+	for (int i = 1; i < cnt; i++){
 		iter = fat_create_chain(iter);
 
 		if (iter == 0){
