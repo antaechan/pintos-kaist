@@ -16,6 +16,8 @@
 #include "filesys/filesys.h"
 #include "threads/palloc.h"
 #include "vm/vm.h"
+#include "filesys/inode.h"
+#include "filesys/directory.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -439,7 +441,7 @@ void sys_close (int fd){
 	struct list_elem *e;
 	struct thread *t = thread_current();
 
-	if(!check_fd(fd))	return;
+	if(!check_fd(fd)) return;
 
 	lock_acquire(&filesys_lock);
 
@@ -459,36 +461,28 @@ void sys_close (int fd){
 	fd_num = search_fd_double_list(fd, &t->fd_list);
 
 	/* search dir_list */
-	if (fd_num == NULL)
+	if (fd_num != NULL)
 	{
-		struct list *dir_list = &t->dir_list;
-		struct list_elem *e1;
-		if(!list_empty(dir_list))
+		list_remove(&fd_num->elem);
+		palloc_free_page(fd_num);
+
+		/* should close file */
+		if (list_empty(&fd_t->dup2_list))
 		{
-			for(e1 = list_begin(dir_list); e1 != list_end(dir_list); e1 = list_next(e1))
-			{	
-				struct dir_desc *desc = list_entry(e1, struct dir_desc, elem);
-				if(desc->fd == fd)
-				{
-					dir_close(desc->dir);
-					list_remove(e1);
-					palloc_free_page(desc);
-					break;
-				}
-			}
+			file_close(fd_t->file);
+			list_remove(&fd_t->elem);
+			palloc_free_page(fd_t);
 		}
 		goto done;
 	}
+	else{
+		struct dir_desc *desc = search_dir_list(fd, &t->dir_list);
+		if(desc == NULL)
+			goto done;
 
-	list_remove(&fd_num->elem);
-	palloc_free_page(fd_num);
-
-	/* should close file */
-	if(list_empty(&fd_t->dup2_list))
-	{
-		file_close(fd_t->file);
-		list_remove(&fd_t->elem);
-		palloc_free_page(fd_t);
+		dir_close(desc->dir);
+		list_remove(&desc->elem);
+		palloc_free_page(desc);
 	}
 
 	done:
@@ -522,26 +516,103 @@ bool
 sys_readdir (int fd, char *name) {
 	
 	check_user_memory(name);
+	bool success = false;
+
+	if(!check_fd(fd));
+		return success;
+
+	struct thread *t = thread_current();
+
+	lock_acquire(&filesys_lock);
+	struct dir_desc *desc = search_dir_list(fd, &t->dir_list);
+	if (desc == NULL)
+		goto done;
+	success = dir_readdir(desc->dir, name);
 	
-	
-/* #ifdef VM
-	check_addr_writable(name);
-#endif */
-	return true;
+	done:
+		lock_release(&filesys_lock);
+		return success;
 }
 
 bool
 sys_isdir (int fd) {
 	
+	bool is_dir;
+	ASSERT(check_fd(fd));
+
+	lock_acquire(&filesys_lock);
 	
-	return true;
+	struct fd_t *fd_t;
+	struct thread *t = thread_current();
+	struct inode *inode = NULL;
+
+	fd_t = search_fd_t_double_list(fd, &t->fd_list);
+
+	/* search dir_list */
+	if (fd_t == NULL){
+		struct dir_desc *desc = search_dir_list(fd, &t->dir_list);
+		if(desc == NULL)
+			goto error;
+		inode = dir_get_inode(desc->dir);
+	}
+	else
+		inode = file_get_inode(fd_t->file);
+
+	/* can not find file or directory, which has fd */
+	if(inode == NULL)
+		goto error;
+
+	if(inode_get_type(inode) == _DIRECTORY)
+		is_dir = true;
+	else if(inode_get_type(inode) == _FILE)
+		is_dir = false;
+
+	lock_release(&filesys_lock);
+	return is_dir;
+
+	error:
+		lock_release(&filesys_lock);
+		PANIC("error: fd not exists");
 }
 
 int
 sys_inumber (int fd) {
 	
+	int inumber;
+	if(!check_fd(fd))
+		return -1;
+
+	lock_acquire(&filesys_lock);
 	
-	return true;
+	struct fd_t *fd_t;
+	struct thread *t = thread_current();
+	struct inode *inode = NULL;
+
+	fd_t = search_fd_t_double_list(fd, &t->fd_list);
+
+	/* search dir_list */
+	if (fd_t == NULL){
+		struct dir_desc *desc = search_dir_list(fd, &t->dir_list);
+		if(desc == NULL)
+			goto error;
+		inode = dir_get_inode(desc->dir);
+	}
+	else
+		inode = file_get_inode(fd_t->file);
+
+	/* can not find file or directory, which has fd */
+	if(inode == NULL)
+		goto error;
+
+	inumber = inode_get_inumber(inode);
+
+	lock_release(&filesys_lock);
+	return inumber;
+
+	error:
+		lock_release(&filesys_lock);
+		return -1;
+
 }
 
 struct fd *search_fd_single_list(int fd, struct list *list){
@@ -588,6 +659,23 @@ struct fd_t *search_fd_t_double_list(int fd, struct list *list){
 		fd_t = list_entry(e, struct fd_t, elem);
 		fd_num = search_fd_single_list(fd, &fd_t->dup2_list);
 		if(fd_num)	return fd_t;
+	}
+	return NULL;
+}
+
+struct dir_desc *search_dir_list(int fd, struct list *list)
+{
+	struct list_elem *e;
+	struct dir_desc *desc;
+
+	if(list_empty(list))
+		return NULL;
+
+	for(e = list_begin(list); e != list_end(list); e = list_next(e))
+	{
+		desc = list_entry(e, struct dir_desc, elem);
+		if(desc->fd == fd)
+			return desc;
 	}
 	return NULL;
 }

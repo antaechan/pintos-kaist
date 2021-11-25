@@ -160,6 +160,9 @@ filesys_open (const char *file_path, int *type) {
 	ASSERT(strlen(file_name) > 0);
 	if (dir != NULL && dir_lookup (dir, file_name, &inode))
 	{
+		if(inode == NULL || inode_removed(inode))
+			return NULL;
+
 		*type = inode_get_type(inode);
 
 		if(*type == _FILE)
