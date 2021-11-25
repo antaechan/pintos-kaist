@@ -249,12 +249,17 @@ dir_remove (struct dir *dir, const char *name) {
 	if (inode == NULL)
 		goto done;
 
+	struct dir_entry e1;
+	off_t pos = 0;
+
 	/* handle removing non-empty directory: return false */
-	/* if(inode_get_type(inode) == _DIRECTORY)
-	{
-		if(!inode->data.empty)
-			goto done;
-	} */
+	if(inode_get_type(inode) == _DIRECTORY){
+		for (; inode_read_at(inode, &e1, sizeof e1, pos) == sizeof e1;
+			 pos += sizeof e1){
+			if (e1.in_use)
+				goto done;
+		}
+	}
 
 	/* Erase directory entry. */
 	e.in_use = false;

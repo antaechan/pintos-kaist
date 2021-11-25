@@ -520,7 +520,9 @@ sys_mkdir (const char *dir) {
 
 bool
 sys_readdir (int fd, char *name) {
+	
 	check_user_memory(name);
+	
 	
 /* #ifdef VM
 	check_addr_writable(name);
@@ -530,12 +532,16 @@ sys_readdir (int fd, char *name) {
 
 bool
 sys_isdir (int fd) {
+	
+	
 	return true;
 }
 
 int
 sys_inumber (int fd) {
-	return true;	
+	
+	
+	return true;
 }
 
 struct fd *search_fd_single_list(int fd, struct list *list){
