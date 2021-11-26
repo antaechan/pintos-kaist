@@ -543,7 +543,6 @@ sys_isdir (int fd) {
 	
 	struct fd_t *fd_t;
 	struct thread *t = thread_current();
-	struct inode *inode = NULL;
 
 	fd_t = search_fd_t_double_list(fd, &t->fd_list);
 
@@ -552,23 +551,13 @@ sys_isdir (int fd) {
 		struct dir_desc *desc = search_dir_list(fd, &t->dir_list);
 		if(desc == NULL)
 			goto error;
-		inode = dir_get_inode(desc->dir);
 		is_dir = true;
 	}
 	else
-	{
-		inode = file_get_inode(fd_t->file);
         is_dir = false;
-	}
 
-	/* can not find file or directory, which has fd */
-	if(inode == NULL)
-		goto error;
+	/* TODO: can not find file or directory, what value return? */
 
-	// if(inode_get_type(inode) == _FILE)
-	// 	is_dir = false;
-	// else if(inode_get_type(inode) == _DIRECTORY)
-	// 	is_dir = true;
 	lock_release(&filesys_lock);
 	return is_dir;
 
