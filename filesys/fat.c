@@ -183,7 +183,7 @@ fat_create_chain (cluster_t clst) {
 		if(new_clst > (fat_fs->fat_length - 1))
 			return 0;
 	}
-
+    
 	ASSERT(fat_fs->bs.root_dir_cluster < new_clst &&
 		 new_clst <= (fat_fs->fat_length - 1));
 

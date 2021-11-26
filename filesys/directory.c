@@ -173,7 +173,13 @@ dir_lookup (const struct dir *dir, const char *name,
 	ASSERT (dir != NULL);
 	ASSERT (name != NULL);
 
-	if (lookup (dir, name, &e, NULL))
+	if(!strcmp(name, "."))
+		*inode = inode_reopen(dir->inode);
+
+	else if(!strcmp(name, ".."))
+	
+		*inode = inode_open(inode_get_psector(dir->inode));
+	else if (lookup (dir, name, &e, NULL))
 		*inode = inode_open (e.inode_sector);
 	else
 		*inode = NULL;
@@ -222,6 +228,18 @@ dir_add (struct dir *dir, const char *name, disk_sector_t inode_sector) {
 	strlcpy (e.name, name, sizeof e.name);
 	e.inode_sector = inode_sector;
 	success = inode_write_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
+
+	/* parent directory referencing */
+	struct inode *child_inode = inode_open(inode_sector);
+	struct inode *parent_inode = dir->inode;
+
+	if(inode_get_type(child_inode) == _DIRECTORY)
+	{
+		inode_set_psector(child_inode, inode_get_inumber(parent_inode));
+		/* write back to disk */
+		disk_write(filesys_disk, inode_sector, inode_get_inode_disk(child_inode));
+	}
+	inode_close(child_inode);
 
 done:
 	return success;

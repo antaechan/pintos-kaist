@@ -15,10 +15,11 @@
  * Must be exactly DISK_SECTOR_SIZE bytes long. */
 struct inode_disk {
 	disk_sector_t start;                /* First data sector. */
+	disk_sector_t parent_sector;		/* parent directory sector number of disk location */
 	off_t length;                       /* File size in bytes. */
 	enum file_type type;				/* file: FILE, directory: DIRECTORY */
 	unsigned magic;                    /* Magic number. */
-	uint32_t unused[124];               /* Not used. */
+	uint32_t unused[123];               /* Not used. */
 };
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -90,6 +91,9 @@ inode_create (disk_sector_t sector, off_t length, enum file_type type) {
 	if (disk_inode != NULL) {
 		size_t sectors = bytes_to_sectors (length);
 		disk_inode->start = 0;
+		if(type == _DIRECTORY)
+			disk_inode->parent_sector = sector;  /* self-referencing */
+		
 		disk_inode->length = length;
 		disk_inode->type = type;
 		disk_inode->magic = INODE_MAGIC;
@@ -379,4 +383,19 @@ inode_get_type (struct inode *inode){
 bool
 inode_removed(struct inode *inode){
 	return inode->removed;
+}
+
+disk_sector_t
+inode_set_psector(struct inode *inode, disk_sector_t psector){
+	inode->data.parent_sector = psector;
+}
+
+disk_sector_t
+inode_get_psector(struct inode *inode){
+	return inode->data.parent_sector;
+}
+
+struct inode_disk *
+inode_get_inode_disk(struct inode *inode){
+	return &inode->data;
 }

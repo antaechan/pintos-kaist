@@ -145,7 +145,6 @@ filesys_open (const char *file_path, int *type) {
 	filesys_parse_path(file_path, directory, file_name);
 	
 	struct dir *dir = dir_open_path(directory);
-	
 	/* 1. directory "" is ok, open relative path */
 		
 	/* 2. file name "", open root directory */

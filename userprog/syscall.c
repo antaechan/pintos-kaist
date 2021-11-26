@@ -518,8 +518,7 @@ sys_readdir (int fd, char *name) {
 	check_user_memory(name);
 	bool success = false;
 
-	if(!check_fd(fd));
-		return success;
+	ASSERT(check_fd(fd));
 
 	struct thread *t = thread_current();
 
@@ -554,19 +553,22 @@ sys_isdir (int fd) {
 		if(desc == NULL)
 			goto error;
 		inode = dir_get_inode(desc->dir);
+		is_dir = true;
 	}
 	else
+	{
 		inode = file_get_inode(fd_t->file);
+        is_dir = false;
+	}
 
 	/* can not find file or directory, which has fd */
 	if(inode == NULL)
 		goto error;
 
-	if(inode_get_type(inode) == _DIRECTORY)
-		is_dir = true;
-	else if(inode_get_type(inode) == _FILE)
-		is_dir = false;
-
+	// if(inode_get_type(inode) == _FILE)
+	// 	is_dir = false;
+	// else if(inode_get_type(inode) == _DIRECTORY)
+	// 	is_dir = true;
 	lock_release(&filesys_lock);
 	return is_dir;
 
